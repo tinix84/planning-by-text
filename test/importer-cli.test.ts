@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { convertResources, legacyRange, splitRoles } from "../tools/import-legacy.ts";
 import { compile } from "../src/compile.ts";
+import { readPlan } from "../src/cli.ts";
+import ExcelJS from "exceljs";
 
 test("legacy 'to 01.MM.YYYY' is exclusive, other ends inclusive", () => {
   assert.equal(legacyRange("01.01.2024", "01.03.2024"), "2024-01..2024-02");
@@ -65,4 +67,21 @@ test("CLI: lint exit code, report and xlsx files", () => {
   assert.ok(!/<script[^>]+src=|<link[^>]+href="http/.test(html), "report must be self-contained");
   execFileSync(process.execPath, ["src/cli.ts", "xlsx", fx, "-o", join(out, "p.xlsx")]);
   assert.ok(existsSync(join(out, "p.xlsx")));
+});
+
+test("new spreadsheet imports declare each referenced role exactly once", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pbt-role-import-"));
+  const resources = join(dir, "resources.md"), effort = join(dir, "effort.xlsx"), out = join(dir, "plan");
+  writeFileSync(resources, "Projects:\nALPHA\nResources:\nAlice Example 100%\nAssignments:\nsection Alice Example\n- ALPHA 100% from 01.01.2024 to 01.02.2024");
+  const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("Effort");
+  ws.addRow(["Dept", "Loc", "Activity", "Who", "Days", "Hours"]);
+  ws.addRow(["Design"]);
+  ws.addRow(["HW", "CH", "Design controls", "HW,CONN(SW,SYS)", null, 100]);
+  ws.addRow(["HW", "CH", "Test controls", "HW", null, 50]);
+  await wb.xlsx.writeFile(effort);
+  execFileSync(process.execPath, ["tools/import-legacy.ts", resources, effort, "-o", out, "--root", "BETA", "--window", "2024-01"]);
+  const registry = readFileSync(join(out, "registry.pbt"), "utf8");
+  for (const role of ["HW", "CONN.SW", "CONN.SYS"])
+    assert.equal(registry.split("\n").filter((line) => line === `role ${role}`).length, 1);
+  assert.deepEqual(compile(readPlan(out)).diagnostics.filter((d) => d.level === "error"), []);
 });

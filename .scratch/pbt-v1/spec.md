@@ -73,12 +73,22 @@ A one-off importer converts the existing allocation list and effort spreadsheet 
 - **Line kinds** (decision-rich shape; it comes from the design session):
   ```
   calendar CH 8h/d 164h/m
+  role POW "Power electronics"
+  role SYS "Systems"
+  role HW "Hardware"
+  role PCB "PCB design"
   person  @id "Name" cap:80% role:POW,SYS loc:CH
   project +ROOT "Title" 2024-01..2024-12 #tag loc:CH role:POW ~1000h
   +ROOT.node.task "Title" ~540h ?HW:60% ?PCB:40% after:.sibling left:200h !1 2024-03..
   @id +ROOT[.node…] 50% 2024-01..2024-03 [status:requested|confirmed|unspecified]
   @id cap:50% 2024-07..2024-12        # capacity change
   ```
+- **Date validation**: an ISO week must belong to its named ISO year. Week 53 is valid only when that year contains it. A range has exactly one `..` separator and at least one endpoint. Single date tokens remain valid. A fact accepts one date/range token.
+
+  Relative durations require a positive safe integer, an explicit start, and a representable end date. Invalid dates and ranges produce E004. Four-digit years keep their value and leading zeros.
+- **Role registry**: declare each role as `role ID` with an optional quoted title. IDs are case-sensitive dotted identifiers, such as `CONN.SW`. Every person role, node default, and task demand must reference an exact declaration. Declaring `CONN` does not declare `CONN.SW`. Declarations may occur after references or in other files.
+
+  Missing or malformed identifiers produce E001. Unknown roles produce E003 at the explicit reference. Duplicate declarations produce E005. New spreadsheet imports emit the required role declarations.
 - **Inherited defaults**: tags combine from ancestors to descendants without duplicates. `role:HW,SYS` sets default roles on a project or node. A node's explicit `?roles` replaces the inherited role list. `loc:CH` selects its effort calendar. An explicit role list or `loc:` overrides the inherited default. Implicit nodes pass defaults onward.
 - **Effort units**: `h` is hours. `d` and `pm` use the node's inherited calendar hours per day and month, including for `left:`. Defaults are 8 h/day and 164 h/month, with `defaultHpm` available to compiler callers. Person calendars determine booking hours independently. Calendar hour factors must be positive and finite. Project budgets use the same effort units; duplicate root budgets produce E005.
 - **Booking status**: confirmed if the file lives under `teams/`, requested if under `projects/`, unspecified elsewhere. An explicit valid `status:` wins. Unknown values produce E001. Forecast supply includes all active states (ADRs 0007 and 0010).
@@ -89,7 +99,7 @@ A one-off importer converts the existing allocation list and effort spreadsheet 
 - **Status attribution**: pins retain their own states. Subtract their effective hours from the pool before attributing its residual hours. Split a same-path pool's residual among its lines in proportion to their own hours. Confirmed, requested, and unspecified totals sum to the forecast load. HTML tooltips and spreadsheet Hours show all three totals.
 - **Demand validation**: explicit role shares cannot exceed 100% in total. Unweighted roles split the remainder equally. If all roles have shares, their sum must be 100%, within a numerical tolerance of 0.0000001 percentage points. Completion must be between 0% and 100%. Invalid shares or completion produce E001. Effort and percentages must be finite. `left:` overrides the demand derived from `done:`. Positive effort without working days after `--as-of` produces W110 and stays in the remaining-effort roll-up.
 - **Effective windows**: intersect each node's dates with every inherited bound, including bounds on open-ended parents. Apply predecessor end dates afterward. W106 identifies dates outside the parent, empty intersections, and blocked dependencies. An empty parent blocks all descendants. An empty predecessor, or one without an end date, blocks its successors. Blocked tasks retain their effort totals but create no demand. Dates never extend automatically.
-- **Lint codes**: E001 syntax or invalid demand/calendar/status values, E002 unknown root (with suggestion), E003 unknown person or calendar, E004 bad date or range, E005 duplicate declaration or root budget, E006 unresolved `after:`, E007 dependency cycle, E008 overlapping capacity changes; W101 overload (one per person), W102 booking on effective zero capacity, W103 path referenced by a booking but never declared (the typo case), W104 role shortfall (one per root and role), W105 pins exceed pool, W106 child window outside parent or blocked by parent/predecessor constraints, W108 effort without a window (one per root), W109 children's effort above the parent's budget, W110 positive effort without remaining working days; I201 active requested booking, I202 request replaced by an exact confirmation.
+- **Lint codes**: E001 syntax or invalid demand/calendar/status/role values, E002 unknown root (with suggestion), E003 unknown person, calendar, or role, E004 bad date or range, E005 duplicate declaration or root budget, E006 unresolved `after:`, E007 dependency cycle, E008 overlapping capacity changes; W101 overload (one per person), W102 booking on effective zero capacity, W103 path referenced by a booking but never declared (the typo case), W104 role shortfall (one per root and role), W105 pins exceed pool, W106 child window outside parent or blocked by parent/predecessor constraints, W108 effort without a window (one per root), W109 children's effort above the parent's budget, W110 positive effort without remaining working days; I201 active requested booking, I202 request replaced by an exact confirmation.
 - **Unknown roots**: a booking on an undeclared root is an error, but its hours still count in the person's load, so overloads are never hidden by a typo.
 - **No build step**: only TypeScript syntax that Node 22.18+ strips natively (no enums, namespaces or parameter properties); relative imports end in `.ts` (ADR 0008).
 - **Dependencies**: one runtime library for writing and reading spreadsheets; nothing else.
@@ -111,5 +121,5 @@ A one-off importer converts the existing allocation list and effort spreadsheet 
 
 ## Further Notes
 
-- Design decisions and their reasons: `docs/adr/0001`–`0010`; vocabulary: `CONTEXT.md`; design map with open questions: `.scratch/pbt-design/map.md`.
+- Design decisions and their reasons: `docs/adr/0001`–`0011`; vocabulary: `CONTEXT.md`; design map with open questions: `.scratch/pbt-design/map.md`.
 - The real legacy data stays outside the repo. Running the importer on it is expected to report several overbookings above 100% (up to 400%), undeclared roots and one invalid date.

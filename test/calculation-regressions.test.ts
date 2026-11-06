@@ -4,7 +4,10 @@ import { compile, type SourceFile } from "../src/compile.ts";
 import { dayNum } from "../src/dates.ts";
 import { loadPct, loadRows, monthHeaders, roleRows, treeRows } from "../src/views.ts";
 
-const registry = `calendar TEST 8h/d 230h/m
+const registry = `role HW
+role SYS
+role TEST
+calendar TEST 8h/d 230h/m
 person @alice "Alice Example" cap:100% role:HW loc:TEST
 project +ALPHA 2024-01..2024-06`;
 const run = (text: string, asOf?: number) => compile([
