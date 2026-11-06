@@ -56,13 +56,17 @@ export function parseEffort(s: string, hpm = 164, hpd = 8): number {
   const m = s.match(/^(\d+(?:\.\d+)?)(h|d|pm)?$/);
   if (!m) throw new Error(`bad effort: ${s}`);
   const v = +m[1];
-  return m[2] === "d" ? v * hpd : m[2] === "pm" ? v * hpm : v;
+  const h = m[2] === "d" ? v * hpd : m[2] === "pm" ? v * hpm : v;
+  if (!Number.isFinite(h)) throw new Error("effort must be finite");
+  return h;
 }
 
 function parsePct(s: string): number {
   const m = s.match(/^(\d+(?:\.\d+)?)%$/);
   if (!m) throw new Error(`bad percentage: ${s}`);
-  return +m[1] / 100;
+  const pct = +m[1] / 100;
+  if (!Number.isFinite(pct)) throw new Error("percentage must be finite");
+  return pct;
 }
 
 export function parseFile(text: string, file: string, diags: Diag[]): Stmt[] {
@@ -100,7 +104,10 @@ function common(toks: string[]): Common {
       const v = t.slice(t.indexOf(":") + 1);
       if (k === "after") c.attrs.after.push(...v.split(",").filter(Boolean));
       else if (k === "left") c.attrs.left = parseEffort(v);
-      else if (k === "done") c.attrs.done = parsePct(v);
+      else if (k === "done") {
+        c.attrs.done = parsePct(v);
+        if (c.attrs.done > 1) throw new Error("done must be between 0% and 100%");
+      }
       else if (k === "status") c.attrs.status = v;
       else c.attrs.other[k] = v;
     } else c.rest.push(t);
@@ -174,6 +181,10 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
         roles.push({ role: r, share: sh ? parsePct(sh) : undefined });
       } else throw new Error(`unexpected: ${t}`);
     }
+    const explicit = roles.reduce((sum, r) => sum + (r.share ?? 0), 0);
+    const allExplicit = roles.length > 0 && roles.every((r) => r.share !== undefined);
+    if (explicit > 1 + 1e-9 || (allExplicit && Math.abs(explicit - 1) > 1e-9))
+      throw new Error("role shares must total 100%, including the remainder for unweighted roles");
     return { kind: "task", path, title: c.title, range: c.range, effort, roles, tags: c.tags, attrs: c.attrs, at };
   }
 
