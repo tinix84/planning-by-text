@@ -1,0 +1,22 @@
+{
+  "name": "planning-by-text",
+  "version": "1.0.0",
+  "description": "Plain-text resource planning: demand per role vs supply per person",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "lint": "node src/cli.ts lint",
+    "report": "node src/cli.ts report"
+  },
+  "keywords": [],
+  "author": "tinix84",
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  },
+  "type": "module",
+  "bin": {
+    "pbt": "src/cli.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

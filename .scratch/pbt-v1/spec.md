@@ -42,7 +42,7 @@ A one-off importer converts the existing allocation list and effort spreadsheet 
 16. As a line manager, I want bookings in my team files to count as confirmed and bookings in project files as requested, so that the report shows which commitments are agreed.
 17. As a PMO, I want to see demand vs supply per role and month for each root, so that I know which roles to hire or rebalance.
 18. As a PMO, I want an error for any reference to an undeclared root, with a "did you mean" suggestion, so that typos never create phantom projects.
-19. As a PMO, I want a warning for child paths used only once, so that misspelled task names are caught.
+19. As a PMO, I want a warning for paths that bookings use but no task line declares, so that misspelled task names are caught.
 20. As a PMO, I want duplicate declarations reported, so that the registry stays unambiguous.
 21. As any editor, I want dates that do not exist to be errors, so that `2024-04-31` cannot slip through.
 22. As any editor, I want date ranges to be inclusive at the precision I wrote (month, quarter, ISO week, day), so that `2024-01..2024-02` means January and February.
@@ -83,7 +83,8 @@ A one-off importer converts the existing allocation list and effort spreadsheet 
 - **Booking status**: confirmed if the file lives under `teams/`, requested if under `projects/`, unspecified elsewhere; an explicit `status:` wins (ADR 0007).
 - **Supply per role**: a person's hours credit their primary role only (open question in the design map).
 - **Pool/pin rule** (ADR 0003): in each month, a booking whose ancestor path has a booking of the same person with hours that month is nested; the person's load uses, per top-level booking, the maximum of its own hours and the sum of its nested bookings, and a warning is raised when the nested sum is larger.
-- **Lint codes**: E001 syntax, E002 unknown root (with suggestion), E003 unknown person, E004 bad date or range, E005 duplicate declaration, E006 unresolved `after:`, E007 dependency cycle; W101 overload, W102 booking on zero capacity, W103 single-use child path, W104 role shortfall, W105 pins exceed pool, W106 child window outside parent, W108 effort without a window; I201 requested booking.
+- **Lint codes**: E001 syntax, E002 unknown root (with suggestion), E003 unknown person or calendar, E004 bad date or range, E005 duplicate declaration, E006 unresolved `after:`, E007 dependency cycle; W101 overload (one per person), W102 booking on zero capacity, W103 path referenced by a booking but never declared (the typo case), W104 role shortfall (one per root and role), W105 pins exceed pool, W106 child window outside parent or empty after `after:`, W108 effort without a window (one per root), W109 children's effort above the parent's budget; I201 requested booking.
+- **Unknown roots**: a booking on an undeclared root is an error, but its hours still count in the person's load, so overloads are never hidden by a typo.
 - **No build step**: only TypeScript syntax that Node 22.18+ strips natively (no enums, namespaces or parameter properties); relative imports end in `.ts` (ADR 0008).
 - **Dependencies**: one runtime library for writing and reading spreadsheets; nothing else.
 

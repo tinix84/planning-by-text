@@ -4,8 +4,12 @@
 
 **Blocked by:** 02
 
-**Status:** needs-triage
+**Status:** done (prototype)
 
 - [ ] Load uses max(pool, sum of pins) per month; W105 when pins exceed pool
 - [ ] I201 for each requested booking
 - [ ] Heatmap tooltip separates confirmed and requested hours
+
+## Comments
+
+- 2026-11-06: implemented in the first prototype commit; tests in `test/`. Review the breakdown and reopen or split if needed.

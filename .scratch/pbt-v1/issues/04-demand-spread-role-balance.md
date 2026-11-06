@@ -4,9 +4,13 @@
 
 **Blocked by:** 02, 03
 
-**Status:** needs-triage
+**Status:** done (prototype)
 
 - [ ] `after:` with absolute and relative (`.x`, `..x`) paths narrows the start; E006 unresolved, E007 cycle
 - [ ] `?HW:60% ?PCB:40%` splits; no share = equal split
 - [ ] W104 when demand exceeds supply for a role in a month; W108 effort with no window
 - [ ] Role balance table in the report, shortfalls highlighted
+
+## Comments
+
+- 2026-11-06: implemented in the first prototype commit; tests in `test/`. Review the breakdown and reopen or split if needed.

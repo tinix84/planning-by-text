@@ -4,8 +4,12 @@
 
 **Blocked by:** 01
 
-**Status:** needs-triage
+**Status:** done (prototype)
 
 - [ ] Two calendars give different booking hours for the same %
 - [ ] Capacity override applies only inside its window
 - [ ] Unknown calendar id is E003-style error
+
+## Comments
+
+- 2026-11-06: implemented in the first prototype commit; tests in `test/`. Review the breakdown and reopen or split if needed.
