@@ -16,8 +16,13 @@
 - [x] Completed tasks do not produce W110
 - [x] W104 when demand exceeds supply for a role in a month; W108 effort with no window
 - [x] Role balance table in the report, shortfalls highlighted
+- [x] Person roles, node defaults, and task demands reference explicitly declared, case-sensitive role IDs
+- [x] Qualified role IDs require exact declarations; declarations may appear later or in another file
+- [x] Missing roles produce E003 at their explicit reference, without duplicate errors on inherited descendants
+- [x] Missing role-list entries and malformed role-demand tokens produce E001
 
 ## Comments
 
 - 2026-11-06: implemented in the first prototype commit; tests in `test/`. Review the breakdown and reopen or split if needed.
 - 2026-11-06: regression tests cover invalid and valid share totals, completion, overdue effort, weekend-only windows, dependency chains, cycles, and inherited bounds. v1 still compares monthly totals per root and role. Daily overload checks and task-level staffing feasibility remain outside this correction.
+- 2026-11-06: explicit role declarations are required, including when the registry is otherwise empty. Tests cover primary and secondary references, inherited defaults, qualified IDs, case sensitivity, and file order. Existing real planning files are not migrated.

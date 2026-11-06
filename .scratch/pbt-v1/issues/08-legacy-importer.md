@@ -10,7 +10,9 @@
 - [ ] Invalid dates, typos in project names and duplicates are kept, not fixed
 - [ ] Spreadsheet section headers become intermediate nodes; Who column becomes `?roles` (`CONN(SW,SYS)` → `?CONN.SW ?CONN.SYS`); simple formulas evaluated
 - [ ] Output lints without E001
+- [x] New spreadsheet imports declare each referenced role once so generated role references pass E003 validation
 
 ## Comments
 
 - 2026-11-06: implemented in the first prototype commit; tests in `test/`. Review the breakdown and reopen or split if needed.
+- 2026-11-06: a synthetic workbook-to-CLI regression verifies unique role declarations and generated-plan validation. This changes future importer output only. Existing imported planning files and exports remain unchanged.

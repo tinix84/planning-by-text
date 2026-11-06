@@ -6,7 +6,9 @@ export type Range = { start?: number; end?: number };
 const DAY = 86_400_000;
 
 export function dayNum(y: number, m: number, d: number): number {
-  return Math.floor(Date.UTC(y, m - 1, d) / DAY);
+  const dt = new Date(0);
+  dt.setUTCFullYear(y, m - 1, d);
+  return Math.floor(dt.getTime() / DAY);
 }
 export function ymd(n: number): [number, number, number] {
   const dt = new Date(n * DAY);
@@ -14,10 +16,10 @@ export function ymd(n: number): [number, number, number] {
 }
 export function fmt(n: number): string {
   const [y, m, d] = ymd(n);
-  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 export function daysInMonth(y: number, m: number): number {
-  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return ymd(dayNum(y, m + 1, 0))[2];
 }
 export function isWorkday(n: number): boolean {
   const wd = new Date(n * DAY).getUTCDay();
@@ -30,7 +32,7 @@ export function monthKey(n: number): number {
   return y * 12 + (m - 1);
 }
 export function monthLabel(k: number): string {
-  return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}`;
+  return `${String(Math.floor(k / 12)).padStart(4, "0")}-${String((k % 12) + 1).padStart(2, "0")}`;
 }
 export function monthStart(k: number): number {
   return dayNum(Math.floor(k / 12), (k % 12) + 1, 1);
@@ -67,7 +69,7 @@ export function parsePoint(tok: string): [number, number] {
     const jan4 = dayNum(y, 1, 4);
     const dow = (new Date(jan4 * DAY).getUTCDay() + 6) % 7; // Mon=0
     const mon = jan4 - dow + (w - 1) * 7;
-    if (w < 1 || w > 53) throw new DateError(`week does not exist: ${tok}`);
+    if (w < 1 || w > 53 || ymd(mon + 3)[0] !== y) throw new DateError(`week does not exist: ${tok}`);
     return [mon, mon + 6];
   }
   if ((m = tok.match(/^(\d{4})$/))) {
@@ -78,7 +80,7 @@ export function parsePoint(tok: string): [number, number] {
 }
 
 export function isDateLike(tok: string): boolean {
-  return /^(\d{4}([-.]|$)|\.\.(\d|\+))/.test(tok) && !tok.endsWith("%");
+  return /^(\d{4}([-.]|$)|\.\.)/.test(tok) && !tok.endsWith("%");
 }
 
 /** Add a relative offset (+3m, +6w, +10d, +1y) to a start day; returns inclusive end. */
@@ -86,6 +88,7 @@ function addRel(start: number, rel: string): number {
   const m = rel.match(/^\+(\d+)([dwmy])$/);
   if (!m) throw new DateError(`bad relative end: ${rel}`);
   const k = +m[1];
+  if (!Number.isSafeInteger(k) || k <= 0) throw new DateError(`relative duration must be a positive safe integer: ${rel}`);
   if (m[2] === "d") return start + k - 1;
   if (m[2] === "w") return start + 7 * k - 1;
   const months = m[2] === "m" ? k : 12 * k;
@@ -101,7 +104,9 @@ export function parseRange(tok: string): Range {
     const [s, e] = parsePoint(tok);
     return { start: s, end: e };
   }
-  const [a, b] = tok.split("..");
+  const parts = tok.split("..");
+  if (parts.length !== 2 || (!parts[0] && !parts[1])) throw new DateError(`bad date range: ${tok}`);
+  const [a, b] = parts;
   const r: Range = {};
   if (a) r.start = parsePoint(a)[0];
   if (b) {
@@ -110,6 +115,8 @@ export function parseRange(tok: string): Range {
       r.end = addRel(r.start, b);
     } else r.end = parsePoint(b)[1];
   }
+  if (r.end !== undefined && (!Number.isFinite(r.end) || !Number.isFinite(ymd(r.end)[0])))
+    throw new DateError(`range end is outside the supported date range: ${tok}`);
   if (r.start !== undefined && r.end !== undefined && r.end < r.start)
     throw new DateError(`range ends before it starts: ${tok}`);
   return r;

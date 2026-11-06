@@ -1,4 +1,6 @@
 # registry
+role POW
+role DSP
 calendar CH 8h/d 164h/m
 calendar DE 8h/d 160h/m
 person @alice "Alice Example" cap:100% role:POW loc:CH
