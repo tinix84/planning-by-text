@@ -8,16 +8,16 @@ export type RoleDemand = { role: string; share?: number };
 
 export type Stmt =
   | { kind: "person"; id: string; name?: string; cap: number; roles: string[]; loc?: string; tags: string[]; at: Loc }
-  | { kind: "project"; path: string; title?: string; range: Range; tags: string[]; attrs: Attrs; at: Loc }
+  | { kind: "project"; path: string; title?: string; range: Range; effort?: string; tags: string[]; attrs: Attrs; at: Loc }
   | { kind: "calendar"; id: string; hpd: number; hpm: number; at: Loc }
   | { kind: "role"; id: string; title?: string; at: Loc }
-  | { kind: "task"; path: string; title?: string; range: Range; effort?: number; roles: RoleDemand[]; tags: string[]; attrs: Attrs; at: Loc }
+  | { kind: "task"; path: string; title?: string; range: Range; effort?: string; roles: RoleDemand[]; tags: string[]; attrs: Attrs; at: Loc }
   | { kind: "booking"; person: string; path: string; pct: number; range: Range; status?: string; tags: string[]; at: Loc }
   | { kind: "capacity"; person: string; cap: number; range: Range; at: Loc };
 
 export type Attrs = {
   after: string[];
-  left?: number;
+  left?: string;
   done?: number;
   prio?: number;
   status?: string;
@@ -51,7 +51,7 @@ export function tokenize(line: string): string[] {
   return out;
 }
 
-/** Effort in hours: 540h, 20d (8h), 3pm (person-months), bare number = hours. */
+/** Convert effort with the selected calendar. Defaults: 164 h/month and 8 h/day. */
 export function parseEffort(s: string, hpm = 164, hpd = 8): number {
   const m = s.match(/^(\d+(?:\.\d+)?)(h|d|pm)?$/);
   if (!m) throw new Error(`bad effort: ${s}`);
@@ -103,12 +103,15 @@ function common(toks: string[]): Common {
       const k = t.slice(0, t.indexOf(":"));
       const v = t.slice(t.indexOf(":") + 1);
       if (k === "after") c.attrs.after.push(...v.split(",").filter(Boolean));
-      else if (k === "left") c.attrs.left = parseEffort(v);
+      else if (k === "left") { parseEffort(v, 1, 1); c.attrs.left = v; }
       else if (k === "done") {
         c.attrs.done = parsePct(v);
         if (c.attrs.done > 1) throw new Error("done must be between 0% and 100%");
       }
-      else if (k === "status") c.attrs.status = v;
+      else if (k === "status") {
+        if (!["confirmed", "requested", "unspecified"].includes(v)) throw new Error(`unknown booking status: ${v}`);
+        c.attrs.status = v;
+      }
       else c.attrs.other[k] = v;
     } else c.rest.push(t);
   }
@@ -132,8 +135,14 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
     const p = toks[1];
     if (!p?.startsWith("+") || !ID.test(p.slice(1))) throw new Error(`project needs a +ROOT id without dots or spaces: ${p ?? ""}`);
     const c = common(toks.slice(2));
-    if (c.rest.length) throw new Error(`unexpected: ${c.rest.join(" ")}`);
-    return { kind: "project", path: p.slice(1), title: c.title, range: c.range, tags: c.tags, attrs: c.attrs, at };
+    let effort: string | undefined;
+    for (const token of c.rest) {
+      if (!token.startsWith("~")) throw new Error(`unexpected: ${token}`);
+      if (effort !== undefined) throw new Error("project has more than one budget");
+      parseEffort(token.slice(1), 1, 1);
+      effort = token.slice(1);
+    }
+    return { kind: "project", path: p.slice(1), title: c.title, range: c.range, effort, tags: c.tags, attrs: c.attrs, at };
   }
 
   if (head === "calendar") {
@@ -141,6 +150,10 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
     const hpd = toks.find((t) => /h\/d$/.test(t));
     const hpm = toks.find((t) => /h\/m$/.test(t));
     if (!id || !hpm) throw new Error(`calendar needs: calendar <ID> <n>h/d <n>h/m`);
+    if ((hpd && !/^\d+(?:\.\d+)?h\/d$/.test(hpd)) || !/^\d+(?:\.\d+)?h\/m$/.test(hpm) ||
+        !Number.isFinite(parseFloat(hpd ?? "8")) || !Number.isFinite(parseFloat(hpm)) ||
+        parseFloat(hpd ?? "8") <= 0 || parseFloat(hpm) <= 0)
+      throw new Error("calendar hours must be positive and finite");
     return { kind: "calendar", id, hpd: hpd ? parseFloat(hpd) : 8, hpm: parseFloat(hpm), at };
   }
 
@@ -172,10 +185,10 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
     const path = head.slice(1);
     if (!PATH.test(path)) throw new Error(`bad path (ids are [A-Za-z0-9_-], no spaces): ${head}`);
     const c = common(toks.slice(1));
-    let effort: number | undefined;
+    let effort: string | undefined;
     const roles: RoleDemand[] = [];
     for (const t of c.rest) {
-      if (t.startsWith("~")) effort = parseEffort(t.slice(1));
+      if (t.startsWith("~")) { parseEffort(t.slice(1), 1, 1); effort = t.slice(1); }
       else if (t.startsWith("?")) {
         const [r, sh] = t.slice(1).split(":");
         roles.push({ role: r, share: sh ? parsePct(sh) : undefined });

@@ -29,6 +29,23 @@ project +ALPHA "Alpha charger" 2024-01..2024-06
 
 Dates: `2024-03`, `2024-Q2`, `2024-W10`, `2024-03-15`, `2024-03..+3m`. ISO only; impossible dates are errors.
 
+## Defaults and booking status
+
+Set node defaults with `loc:` and `role:`. Children inherit them through implicit nodes. Tags combine without duplicates. Explicit child roles or `loc:` replace the corresponding default.
+
+```
+calendar DE 6h/d 150h/m
+project +ALPHA "Alpha charger" 2024-01..2024-06 loc:CH role:POW ~1000h
++ALPHA.group loc:DE ?DSP #lab
++ALPHA.group.task ~1pm left:2d
+```
+
+Task effort and `left:` use the node calendar for days and person-months. Without a selected calendar, defaults are 8 h/day and 164 h/month. Declare each selected calendar in the registry. Booking hours use the person's calendar.
+
+All active bookings count as forecast supply. The report separates confirmed, requested, and unspecified hours. Pins retain their status while consuming their pool. Spreadsheet Hours includes the same status totals.
+
+To confirm a request, add the same booking under `teams/` or use `status:confirmed`. Each confirmation replaces one request with identical person, path, percentage, and resolved dates. Partial matches stay separate. I202 identifies the replaced request. Source files retain both lines, while calculated views count the active confirmation once.
+
 ## Usage
 
 Requires Node 22.18+ (TypeScript runs natively, no build step).
@@ -54,11 +71,11 @@ The importer keeps legacy mistakes (typos, impossible dates, unknown projects) s
 
 | Code | Meaning |
 |---|---|
-| E001 | syntax error, invalid role shares or completion, or non-finite effort/percentage |
+| E001 | syntax error or invalid demand, calendar hours, or booking status |
 | E002 | unknown root (with "did you mean") |
 | E003 | unknown person or calendar |
 | E004 | impossible date, reversed range, booking without dates |
-| E005 | duplicate declaration |
+| E005 | duplicate declaration or root budget |
 | E006 / E007 | `after:` target missing / dependency cycle |
 | E008 | overlapping capacity changes for one person |
 | W101 | person load above capacity (per person: months and peak) |
@@ -70,7 +87,8 @@ The importer keeps legacy mistakes (typos, impossible dates, unknown projects) s
 | W108 | effort without any window (per root) |
 | W109 | children's effort above the parent's budget |
 | W110 | positive effort without remaining working days |
-| I201 | requested booking |
+| I201 | active requested booking |
+| I202 | request replaced by an exact confirmation |
 
 ## Docs
 

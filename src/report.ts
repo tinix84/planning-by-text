@@ -21,8 +21,8 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
       if (p === undefined) return `<td class="h z"></td>`;
       const band = !isFinite(p) ? "x" : p > 1.005 ? "o" : p >= 0.8 ? "f" : "u";
       const tip = `${r.person} — ${r0(c!.hours)} h of ${r0(c!.capHours)} h` +
-        (c!.requested ? ` (${r0(c!.requested)} h requested)` : "") + "\n" +
-        c!.parts.filter((x) => x.hours > 0).map((x) => `+${x.path}: ${r0(x.hours)} h${x.status === "requested" ? " (req.)" : ""}`).join("\n");
+        `\n${r0(c!.confirmed)} h confirmed · ${r0(c!.requested)} h requested · ${r0(c!.unspecified)} h unspecified\n` +
+        c!.parts.filter((x) => x.hours > 0).map((x) => `+${x.path}: ${r0(x.hours)} h (${x.status})`).join("\n");
       return `<td class="h ${band}${c!.requested ? " rq" : ""}" title="${esc(tip)}">${isFinite(p) ? Math.round(p * 100) : "∞"}</td>`;
     }).join("");
     return `<tr class="f"><th class="pl">${esc(r.name)}<small> @${esc(r.person)} · ${esc(r.role || "no role")} · ${Math.round(r.cap * 100)}%</small></th>${cells}</tr>`;
@@ -33,13 +33,13 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
       const s = r.supply[i];
       if (d < 0.5 && s < 0.5) return `<td class="b z"></td>`;
       const cls = d > s + 0.5 ? "short" : "ok";
-      return `<td class="b ${cls}" title="demand ${r0(d)} h / supply ${r0(s)} h"><span>${r0(d)}</span><span>${r0(s)}</span></td>`;
+      return `<td class="b ${cls}" title="demand ${r0(d)} h / forecast supply ${r0(s)} h"><span>${r0(d)}</span><span>${r0(s)}</span></td>`;
     }).join("");
     return `<tr class="f"><th class="pl">+${esc(r.root)}<small> ?${esc(r.role)}</small></th>${cells}</tr>`;
   }).join("");
 
   const tree = treeRows(model).map((t) =>
-    `<tr class="f${t.declared ? "" : " undecl"}"><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${esc(t.path.split(".").pop()!)}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td></tr>`).join("");
+    `<tr class="f${t.declared ? "" : " undecl"}"><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${esc(t.path)}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td></tr>`).join("");
 
   const title = opts.title ?? "Resource plan";
   return `<!doctype html>
@@ -78,7 +78,7 @@ tr.undecl td{color:var(--mut);font-style:italic}.legend{display:flex;gap:10px;fl
 <div class="legend"><span><i style="background:var(--u)"></i>&lt; 80%</span><span><i style="background:var(--f)"></i>80–100%</span><span><i style="background:var(--o)"></i>&gt; 100%</span><span><i style="background:var(--x)"></i>booked at 0% capacity</span><span><i style="outline:2px dashed var(--acc);outline-offset:-2px"></i>contains requested hours</span></div>
 <div class="wrap"><table><thead><tr><th class="pl">Person</th>${mh}</tr></thead><tbody>${heat}</tbody></table></div>
 
-<h2>Demand vs supply per role (hours: demand above, supply below)</h2>
+<h2>Demand vs forecast supply per role (hours: demand above, supply below)</h2>
 <div class="wrap"><table><thead><tr><th class="pl">Root · role</th>${mh}</tr></thead><tbody>${roles || `<tr><td>No demand or supply.</td></tr>`}</tbody></table></div>
 
 <h2>Diagnostics</h2>

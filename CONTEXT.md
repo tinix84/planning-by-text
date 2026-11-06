@@ -7,7 +7,7 @@ Plain-text resource planning for a matrix organisation: project managers write t
 ### Structure
 
 **Plan**:
-The set of all plan files under one root folder, merged into a single model; line order and file placement carry no meaning.
+The set of all plan files under one root folder, merged into a single model. Line order carries no meaning. File placement supplies the default booking status.
 _Avoid_: project file, schedule
 
 **Root**:
@@ -81,6 +81,12 @@ _Avoid_: tentative, soft booking
 **Confirmed booking**:
 A booking written by the supply side.
 _Avoid_: hard booking, committed
+
+**Unspecified booking**:
+A booking without a stated request or confirmation state.
+
+**Forecast supply**:
+Hours represented by confirmed, requested, and unspecified bookings after exact confirmations replace matching requests.
 
 **Load**:
 A person's booked hours in a month divided by their capacity hours in that month.
