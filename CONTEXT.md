@@ -48,6 +48,22 @@ _Avoid_: ETC, to-go, backlog
 A kind of skill that supplies or demands hours (POW, DSP, CONN.SW); people have a primary role and optional secondary roles.
 _Avoid_: function, discipline, competence
 
+**Competency**:
+A specific area of knowledge or ability that a person can demonstrate at an assessed level.
+_Avoid_: role, capacity
+
+**Qualification profile**:
+A set of minimum competency levels needed for particular work. A profile does not supply hours.
+_Avoid_: planning role, job title
+
+**Assessment**:
+A person's recorded competency levels and active state. An absent assessment means that the person's level is unknown.
+_Avoid_: capacity, qualification profile
+
+**Coverage**:
+The share of a profile's positive competency requirements that a person's assessment meets.
+_Avoid_: weighted score, availability
+
 ### Supply
 
 **Person**:

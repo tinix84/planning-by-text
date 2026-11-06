@@ -11,6 +11,9 @@ export type Stmt =
   | { kind: "project"; path: string; title?: string; range: Range; effort?: string; tags: string[]; attrs: Attrs; at: Loc }
   | { kind: "calendar"; id: string; hpd: number; hpm: number; at: Loc }
   | { kind: "role"; id: string; title?: string; at: Loc }
+  | { kind: "competency"; id: string; title?: string; at: Loc }
+  | { kind: "profile"; id: string; title?: string; levels: Record<string, number>; at: Loc }
+  | { kind: "assessment"; person: string; active: boolean; levels: Record<string, number>; at: Loc }
   | { kind: "task"; path: string; title?: string; range: Range; effort?: string; roles: RoleDemand[]; tags: string[]; attrs: Attrs; at: Loc }
   | { kind: "booking"; person: string; path: string; pct: number; range: Range; status?: string; tags: string[]; at: Loc }
   | { kind: "capacity"; person: string; cap: number; range: Range; at: Loc };
@@ -119,6 +122,11 @@ function common(toks: string[]): Common {
         c.attrs.status = v;
       }
       else if (k === "role") { roleIds(v); c.attrs.other.role = v; }
+      else if (k === "profile") {
+        if (!PATH.test(v)) throw new Error(`bad profile identifier: ${v}`);
+        if (c.attrs.other.profile !== undefined) throw new Error("node accepts only one profile requirement");
+        c.attrs.other.profile = v;
+      }
       else c.attrs.other[k] = v;
     } else c.rest.push(t);
   }
@@ -128,10 +136,39 @@ function common(toks: string[]): Common {
 function parseLine(toks: string[], at: Loc): Stmt | null {
   const head = toks[0];
 
+  if (head === "profile" || head === "assessment") {
+    const id = toks[1];
+    if (head === "profile" ? !id || !PATH.test(id) : !id?.startsWith("@") || !ID.test(id.slice(1)))
+      throw new Error(`${head} needs ${head === "profile" ? "an identifier" : "an @person identifier"}`);
+    const rest = toks.slice(2);
+    let title: string | undefined;
+    if (head === "profile" && rest[0]?.startsWith('"')) {
+      const token = rest.shift()!;
+      if (token.length < 2 || !token.endsWith('"')) throw new Error("profile title needs closing quotes");
+      title = token.slice(1, -1);
+    }
+    const levels: Record<string, number> = Object.create(null);
+    let active = true, haveActive = false;
+    for (const token of rest) {
+      if (head === "assessment" && token.startsWith("active:")) {
+        if (haveActive || !/^active:(true|false)$/.test(token)) throw new Error("assessment needs one active:true or active:false value");
+        haveActive = true; active = token === "active:true"; continue;
+      }
+      const pair = token.split(":");
+      if (pair.length !== 2 || !PATH.test(pair[0]) || !/^[0-4]$/.test(pair[1]))
+        throw new Error(`competency level must be an integer from 0 to 4: ${token}`);
+      if (Object.hasOwn(levels, pair[0])) throw new Error(`duplicate competency level: ${pair[0]}`);
+      levels[pair[0]] = +pair[1];
+    }
+    return head === "profile" ? { kind: "profile", id, title, levels, at }
+      : { kind: "assessment", person: id.slice(1), active, levels, at };
+  }
+
   if (head === "person") {
     const id = toks[1];
     if (!id?.startsWith("@") || !ID.test(id.slice(1))) throw new Error(`person needs an @id: ${id ?? ""}`);
     const c = common(toks.slice(2));
+    if (c.attrs.other.profile !== undefined) throw new Error("profile requirements belong on work nodes");
     if (c.rest.length) throw new Error(`unexpected: ${c.rest.join(" ")}`);
     const cap = c.attrs.other.cap !== undefined ? parsePct(c.attrs.other.cap) : 1;
     const roles = c.attrs.other.role !== undefined ? roleIds(c.attrs.other.role) : [];
@@ -164,12 +201,12 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
     return { kind: "calendar", id, hpd: hpd ? parseFloat(hpd) : 8, hpm: parseFloat(hpm), at };
   }
 
-  if (head === "role") {
+  if (head === "role" || head === "competency") {
     const id = toks[1], title = toks[2];
-    if (!id || !PATH.test(id)) throw new Error("role needs an identifier, such as HW or CONN.SW");
+    if (!id || !PATH.test(id)) throw new Error(`${head} needs an identifier, such as HW or CONN.SW`);
     if (toks.length > 3 || (title !== undefined && !(title.startsWith('"') && title.endsWith('"') && title.length >= 2)))
-      throw new Error("role accepts only an identifier and an optional quoted title");
-    return { kind: "role", id, title: title?.slice(1, -1), at };
+      throw new Error(`${head} accepts only an identifier and an optional quoted title`);
+    return { kind: head, id, title: title?.slice(1, -1), at };
   }
 
   if (head.startsWith("@")) {
@@ -177,6 +214,7 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
     if (!ID.test(person)) throw new Error(`bad person id: ${head}`);
     const pathTok = toks.find((t) => t.startsWith("+"));
     const c = common(toks.slice(1).filter((t) => t !== pathTok));
+    if (c.attrs.other.profile !== undefined) throw new Error("profile requirements belong on work nodes");
     if (!pathTok) {
       // capacity change over time: @falk cap:50% 2024-07..2024-12
       if (c.attrs.other.cap === undefined) throw new Error(`booking needs a +path (or cap: for a capacity change)`);
