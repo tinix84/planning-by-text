@@ -1,12 +1,20 @@
 // Pure views of the model, shared by the HTML report and the spreadsheet export.
 import { fmt, monthLabel } from "./dates.ts";
 import type { Cell, Model } from "./compile.ts";
+import { matchProfile, type ProfileMatch } from "./competencies.ts";
+
+export function profileRows(m: Model, profile: string, includeInactive = false): ProfileMatch[] {
+  if (!m.profiles.has(profile)) throw new Error(`unknown profile ${profile}`);
+  return [...m.persons.keys()].map((person) => matchProfile(m, person, profile))
+    .filter((r) => includeInactive || r.active)
+    .sort((a, b) => (b.coverage ?? -1) - (a.coverage ?? -1) || a.person.localeCompare(b.person));
+}
 
 export type LoadRow = { person: string; name: string; role: string; cap: number; cells: (Cell | undefined)[] };
 export type RoleRow = { root: string; role: string; demand: number[]; supply: number[] };
 export type TreeRow = {
   path: string; depth: number; title: string; effort: number; remaining: number;
-  roles: string; window: string; declared: boolean; tags: string;
+  roles: string; window: string; declared: boolean; tags: string; profile: string;
 };
 
 export const monthHeaders = (m: Model) => m.months.map(monthLabel);
@@ -40,7 +48,7 @@ export function treeRows(m: Model): TreeRow[] {
       path, depth, title: n.title ?? "", effort: n.total, remaining: n.remaining,
       roles: n.roles.map((r) => r.role + (r.share !== undefined ? `:${Math.round(r.share * 100)}%` : "")).join(" "),
       window: n.window ? `${fmt(n.window.s)}..${fmt(n.window.e)}` : "",
-      declared: !!n.decl, tags: n.tags.join(" "),
+      declared: !!n.decl, tags: n.tags.join(" "), profile: n.profile ?? "",
     });
     for (const c of [...n.children].sort()) visit(c, depth + 1);
   };

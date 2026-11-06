@@ -45,8 +45,8 @@ export async function writeXlsx(model: Model, diags: Diag[], out: string): Promi
   }
 
   const t = wb.addWorksheet("Tasks");
-  head(t, ["Path", "Depth", "Title", "Effort h", "Remaining h", "Roles", "Window", "Tags", "Declared"]);
-  for (const x of treeRows(model)) t.addRow([x.path, x.depth, x.title, x.effort, x.remaining, x.roles, x.window, x.tags, x.declared]);
+  head(t, ["Path", "Depth", "Title", "Effort h", "Remaining h", "Roles", "Window", "Tags", "Declared", "Profile"]);
+  for (const x of treeRows(model)) t.addRow([x.path, x.depth, x.title, x.effort, x.remaining, x.roles, x.window, x.tags, x.declared, x.profile]);
 
   const b = wb.addWorksheet("Bookings");
   head(b, ["Person", "Path", "Load", "Start", "End", "Status", "File", "Line"]);
