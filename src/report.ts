@@ -53,14 +53,27 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
     return `<tr class="f"><th class="pl">${personDetails(r.person, r.name)}<small> @${esc(r.person)} · ${esc(r.role || "no role")} · baseline capacity ${Math.round(r.cap * 100)}%</small></th>${cells}</tr>`;
   }).join("");
 
-  const roles = roleRows(model).map((r) => {
-    const cells = r.demand.map((d, i) => {
-      const s = r.supply[i];
+  const balanceCells = (demand: number[], supply: number[], roleGaps?: boolean[]): string =>
+    demand.map((d, i) => {
+      const s = supply[i];
       if (d < 0.5 && s < 0.5) return `<td class="b z"></td>`;
-      const cls = d > s + 0.5 ? "short" : "ok";
-      return `<td class="b ${cls}" title="demand ${r0(d)} h / forecast supply ${r0(s)} h"><span>${r0(d)}</span><span>${r0(s)}</span></td>`;
+      const short = roleGaps?.[i] ?? d > s + 0.5;
+      const tip = `demand ${r0(d)} h / forecast supply ${r0(s)} h${roleGaps && short ? "; role shortfall — expand Roles" : ""}`;
+      return `<td class="b ${short ? "short" : "ok"}" title="${tip}"><span>${r0(d)}</span><span>${r0(s)}</span></td>`;
     }).join("");
-    return `<tr class="f"><th class="pl">${projectDetails(r.root)}<small> ?${esc(r.role)}</small></th>${cells}</tr>`;
+  const projectRoles = new Map<string, ReturnType<typeof roleRows>>();
+  for (const r of roleRows(model)) {
+    if (!projectRoles.has(r.root)) projectRoles.set(r.root, []);
+    projectRoles.get(r.root)!.push(r);
+  }
+  const roles = [...projectRoles].map(([root, rows]) => {
+    const demand = model.months.map((_, i) => rows.reduce((sum, r) => sum + r.demand[i], 0));
+    const supply = model.months.map((_, i) => rows.reduce((sum, r) => sum + r.supply[i], 0));
+    const gaps = model.months.map((_, i) => rows.some(r => r.demand[i] > r.supply[i] + 0.5));
+    const panel = `balance-${root}`;
+    const breakdown = rows.map(r => `<tr data-balance-role="${esc(r.role)}"><th class="pl">?${esc(r.role)}</th>${balanceCells(r.demand, r.supply)}</tr>`).join("");
+    return `<tr class="f balance-total" data-balance-project="${esc(root)}"><th class="pl">${projectDetails(root)}<button type="button" class="role-toggle" aria-expanded="false" aria-controls="${esc(panel)}">Roles (${rows.length})</button></th>${balanceCells(demand, supply, gaps)}</tr>` +
+      `<tr class="balance-panel" id="${esc(panel)}" hidden><td colspan="${model.months.length + 1}"><table><thead><tr><th>Role</th>${mh}</tr></thead><tbody>${breakdown}</tbody></table></td></tr>`;
   }).join("");
 
   const tree = treeRows(model).map((t) =>
@@ -97,6 +110,9 @@ tr.undecl td{color:var(--mut);font-style:italic}.legend{display:flex;gap:10px;fl
 .drill-body ul{padding-left:18px;margin:4px 0}.drill-body li{margin:0 0 10px;overflow-wrap:anywhere}.drill-body p{color:var(--mut);font-size:11px;margin:8px 0}
 .drill-body small{display:block;color:var(--mut);font-weight:400}.assumptions{border:1px solid var(--ff);background:var(--f);padding:12px 16px;border-radius:8px;margin:12px 0}
 .assumptions summary{cursor:pointer;font-weight:600}.assumptions li{margin-top:6px}
+.role-toggle{display:block;margin-top:6px;padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:var(--card);color:var(--acc);font:inherit;font-size:12px;cursor:pointer}
+.role-toggle:focus-visible{outline:2px solid var(--acc);outline-offset:2px}.balance-panel>td{padding:8px 12px;background:var(--bg)}
+.balance-panel table{background:var(--card)}tr[hidden]{display:none}
 </style></head><body><main>
 <h1>${esc(title)}</h1>
 ${assumptions}
@@ -109,8 +125,9 @@ ${assumptions}
 <div class="legend"><span><i style="background:var(--u)"></i>&lt; 80%</span><span><i style="background:var(--f)"></i>80–100%</span><span><i style="background:var(--o)"></i>&gt; 100%</span><span><i style="background:var(--x)"></i>booked at 0% capacity</span><span><i style="outline:2px dashed var(--acc);outline-offset:-2px"></i>contains requested hours</span></div>
 <div class="wrap"><table><thead><tr><th class="pl">Person</th>${mh}</tr></thead><tbody>${heat}</tbody></table></div>
 
-<h2>Demand vs forecast supply per role (hours: demand above, supply below)</h2>
-<div class="wrap"><table><thead><tr><th class="pl">Root · role</th>${mh}</tr></thead><tbody>${roles || `<tr><td>No demand or supply.</td></tr>`}</tbody></table></div>
+<h2>Demand vs forecast supply per project (hours: demand above, supply below)</h2>
+<p class="sub">One total per project. Expand Roles for the breakdown. Red cells include shortages in individual roles.</p>
+<div class="wrap"><table><thead><tr><th class="pl">Project</th>${mh}</tr></thead><tbody>${roles || `<tr><td>No demand or supply.</td></tr>`}</tbody></table></div>
 
 <h2>Diagnostics</h2>
 <div class="wrap"><table><thead><tr><th>Code</th><th>Where</th><th>Message</th></tr></thead><tbody id="diags">${diagRows || `<tr><td colspan=3>No findings.</td></tr>`}</tbody></table></div>
@@ -120,7 +137,10 @@ ${assumptions}
 </main>
 <script>
 (function(){var q=document.getElementById("q"),ni=document.getElementById("noinfo");
-function run(){var t=q.value.toLowerCase();document.querySelectorAll("tr.f").forEach(function(r){var hit=!t||r.textContent.toLowerCase().indexOf(t)>=0||(r.innerHTML.toLowerCase().indexOf(t)>=0);var info=ni.checked&&r.classList.contains("lv-info");r.classList.toggle("hide",!hit||info);});}
+function hit(r,t){return !t||r.textContent.toLowerCase().indexOf(t)>=0||r.innerHTML.toLowerCase().indexOf(t)>=0;}
+function run(){var t=q.value.toLowerCase();document.querySelectorAll("tr.f:not(.balance-total)").forEach(function(r){var info=ni.checked&&r.classList.contains("lv-info");r.classList.toggle("hide",!hit(r,t)||info);});
+document.querySelectorAll("tr.balance-total").forEach(function(r){var b=r.querySelector(".role-toggle"),panel=document.getElementById(b.getAttribute("aria-controls")),rows=Array.from(panel.querySelectorAll("[data-balance-role]")),projectHit=hit(r,t),show=projectHit||rows.some(function(row){return hit(row,t);});r.classList.toggle("hide",!show);panel.hidden=!show||b.getAttribute("aria-expanded")!=="true";rows.forEach(function(row){row.hidden=!projectHit&&!hit(row,t);});});}
+document.querySelectorAll(".role-toggle").forEach(function(b){b.addEventListener("click",function(){b.setAttribute("aria-expanded",b.getAttribute("aria-expanded")==="true"?"false":"true");run();});});
 q.addEventListener("input",run);ni.addEventListener("change",run);run();})();
 </script></body></html>`;
 }
