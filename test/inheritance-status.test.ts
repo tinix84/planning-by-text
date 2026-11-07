@@ -65,7 +65,7 @@ test("HTML tree rows retain full paths so project filters include descendants", 
   const html = renderReport(r.model, r.diagnostics);
   const row = html.match(/<tr class="f[^>]*>[^]*?A &amp; B[^]*?<\/tr>/)?.[0];
   assert.ok(row?.includes(">ALPHA.group.task</td>"));
-  assert.ok(html.includes(">ALPHA.group</td>"));
+  assert.match(html, /aria-label="Expand ALPHA.group"/);
 });
 
 test("requested pins keep their status while consuming a confirmed pool", () => {
