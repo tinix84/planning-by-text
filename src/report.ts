@@ -31,12 +31,13 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
     const node = model.nodes.get(b.path);
     const pin = (byPerson.get(b.person) ?? []).some(parent => b.path.startsWith(parent.path + ".") && b.s <= parent.e && parent.s <= b.e);
     const kind = pin ? "pin" : node?.children.length ? "pool" : b.path === node?.root ? "project booking" : "booking";
-    return `<span class="mono">+${esc(b.path)}</span>${node?.title ? ` — ${esc(node.title)}` : ""}<small>${Math.round(b.pct * 1000) / 10}% · ${fmt(b.s)}..${fmt(b.e)} · ${esc(b.status)} · ${kind}</small>`;
+    const hours = [...b.hours.values()].reduce((sum, h) => sum + h, 0);
+    return `<span class="mono">+${esc(b.path)}</span> <strong class="booking-hours">${r0(hours)} h booked</strong>${node?.title ? ` — ${esc(node.title)}` : ""}<small>${Math.round(b.pct * 1000) / 10}% · ${fmt(b.s)}..${fmt(b.e)} · ${esc(b.status)} · ${kind}</small>`;
   };
   const personDetails = (id: string, name: string): string => {
     const bookings = byPerson.get(id) ?? [];
     const body = bookings.length ? `<ul>${bookings.map(b => `<li>${bookingInfo(b)}</li>`).join("")}</ul>` : "<p>No bookings recorded.</p>";
-    return `<details class="drill" data-person="${esc(id)}"><summary>${esc(name)}</summary><div class="drill-body">${body}<p>Project bookings and pools do not identify individual task assignments. Pins consume their pool.</p></div></details>`;
+    return `<details class="drill" data-person="${esc(id)}"><summary>${esc(name)}</summary><div class="drill-body">${body}<p>Hours cover each booking's date range. Project bookings and pools do not identify individual task assignments. Pins consume their pool.</p></div></details>`;
   };
   const projectDetails = (path: string, label = `+${path}`, showWork = true): string => {
     const bookings = model.bookings.filter(b => b.path === path || b.path.startsWith(path + "."));
@@ -48,7 +49,7 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
         const effort = hasEstimate(t.path) ? `${r0(t.effort)} h effort · ${r0(t.remaining)} h remaining` : "Effort not estimated";
         return `<li data-project-work="${esc(t.path)}" style="margin-left:${Math.max(0, t.depth - path.split(".").length) * 12}px"><span class="mono">+${esc(t.path)}</span>${t.title ? `<br><strong>${esc(t.title)}</strong>` : ""}<small>${node.children.length ? "Section" : "Task"} · ${effort}<br>${esc(t.roles || "Role not specified")} · ${esc(t.window || (node.emptyWindow ? "Blocked window" : "No window"))}</small></li>`;
       }).join("")}</ul>` : "<p>No task breakdown is recorded for this project.</p>");
-    return `<details class="drill" data-project="${esc(path)}"><summary>${esc(label)}</summary><div class="drill-body"><h4>Booked people</h4>${body}${work}<p>Booking percentages are shares of full time. Pins consume their pool.</p></div></details>`;
+    return `<details class="drill" data-project="${esc(path)}"><summary>${esc(label)}</summary><div class="drill-body"><h4>Booked people</h4>${body}${work}<p>Hours cover each booking's date range. Booking percentages are shares of full time. Pins consume their pool.</p></div></details>`;
   };
   const assumptions = opts.assumptions?.length
     ? `<aside class="assumptions"><details open><summary>Scenario assumptions — unverified (${opts.assumptions.length})</summary><ul>${opts.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details></aside>` : "";
@@ -64,7 +65,7 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
       const tip = `${r.person} — ${r0(c!.hours)} h of ${r0(c!.capHours)} h` +
         `\n${r0(c!.confirmed)} h confirmed · ${r0(c!.requested)} h requested · ${r0(c!.unspecified)} h unspecified\n` +
         c!.parts.filter((x) => x.hours > 0).map((x) => `+${x.path}: ${r0(x.hours)} h (${x.status})`).join("\n");
-      return `<td class="h ${band}${c!.requested ? " rq" : ""}" title="${esc(tip)}">${isFinite(p) ? Math.round(p * 100) : "∞"}</td>`;
+      return `<td class="h ${band}${c!.requested ? " rq" : ""}" title="${esc(tip)}">${isFinite(p) ? Math.round(p * 100) + "%" : "∞"}</td>`;
     }).join("");
     return `<tr class="f"><th class="pl">${personDetails(r.person, r.name)}<small> @${esc(r.person)} · ${esc(r.role || "no role")} · baseline capacity ${Math.round(r.cap * 100)}%</small></th>${cells}</tr>`;
   }).join("");
