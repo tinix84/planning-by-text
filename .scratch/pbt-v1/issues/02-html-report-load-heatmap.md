@@ -13,4 +13,6 @@
 
 ## Comments
 
+- 2026-11-07: Ticket 10 adds person-to-work and project-to-resource dropdowns. The report retains its offline, read-only behavior.
+
 - 2026-11-06: implemented in the first prototype commit; tests in `test/`. Review the breakdown and reopen or split if needed.

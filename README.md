@@ -92,6 +92,8 @@ To confirm a request, add the same booking under `teams/` or use `status:confirm
 
 ## Usage
 
+In the HTML report, click a person's name to expand their bookings and work paths. Click a project in the role balance or root work-tree row to see its booked people. Each entry shows the percentage, resolved dates, booking status, and pool/pin context. Native expanders also work with the keyboard. Project pools retain unspecified task assignments. Scenario reports can display an explicit list of unverified assumptions.
+
 Requires Node 22.18+ (TypeScript runs natively, no build step).
 
 ```sh
