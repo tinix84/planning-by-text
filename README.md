@@ -96,7 +96,9 @@ In the HTML report, click a person's name to expand their bookings and work path
 
 The demand/supply table shows one total row per project. Click **Roles** to expand the monthly role breakdown. Red project cells retain individual role-shortfall signals, including when the total supply covers the total demand. The text filter also matches collapsed roles.
 
-The work tree starts with roots only. Click a root or section name to show its immediate children. Each branch has its own expansion state. Search reveals matching paths and their ancestors. Clearing search restores normal expansion choices. Resource dropdowns remain independent of tree expansion.
+The work tree starts with roots only. Click a root or section name to show its immediate children. **Expand all** opens every branch. **Collapse all** returns to the project overview. Both controls respect the current filter. A counter shows the visible work items. Each branch has its own expansion state. Search reveals matching paths and their ancestors. Clearing search restores normal expansion choices. Resource dropdowns remain independent of tree expansion.
+
+Expanding a project in the balance table shows its booked people and work breakdown, including titles, effort, remaining effort, roles, and dates. Projects without bookings are explicitly unassigned. Projects without task records say so. The work tree shows remaining effort even when it equals the estimate. Missing estimates are labeled **Not estimated**. Explicit zero estimates remain zero.
 
 Requires Node 22.18+ (TypeScript runs natively, no build step).
 
