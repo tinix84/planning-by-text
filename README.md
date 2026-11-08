@@ -94,6 +94,8 @@ To confirm a request, add the same booking under `teams/` or use `status:confirm
 
 In the HTML report, click a person's name to expand their bookings and work paths. Click a project in the project balance, or **Resources** beneath a work-tree root, to see its booked people. Each entry shows booked hours over its date range, percentage, resolved dates, booking status, and pool/pin context. Pins consume their pool, so their hours are included in the pool's hours. Monthly load cells show percentages with the percent sign. Expanders also work with the keyboard. Project pools retain unspecified task assignments. Scenario reports can display an explicit list of unverified assumptions.
 
+Expanding a person also shows one row per project, with allocated hours aligned under each month. These rows use the effective load, so pins consume their pool and do not add duplicate hours. Hover over a monthly value to see its booking status breakdown.
+
 The demand/supply table shows one total row per project. Click **Roles** to expand the monthly role breakdown. Red project cells retain individual role-shortfall signals, including when the total supply covers the total demand. The text filter also matches collapsed roles.
 
 The work tree starts with roots only. Click a root or section name to show its immediate children. **Expand all** opens every branch. **Collapse all** returns to the project overview. Both controls respect the current filter. A counter shows the visible work items. Each branch has its own expansion state. Search reveals matching paths and their ancestors. Clearing search restores normal expansion choices. Resource dropdowns remain independent of tree expansion.
