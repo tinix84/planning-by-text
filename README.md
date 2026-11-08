@@ -98,6 +98,8 @@ Expanding a person also shows one row per project, with allocated hours aligned 
 
 Expand a project beneath a person to see their booked task paths, titles, and monthly hours. Remaining project and section pool hours have separate labels. Only recorded booking paths appear. Projects without descendant bookings show **No task bookings**. Collapsing a person hides the task rows and retains each project's expansion state.
 
+Use **Expand all** above the person table to show every person, project, and booked task. **Collapse all** returns to person summaries. Both controls preserve the current filter. The work tree has separate bulk controls.
+
 The demand/supply table shows one total row per project. Click **Roles** to expand the monthly role breakdown. Red project cells retain individual role-shortfall signals, including when the total supply covers the total demand. The text filter also matches collapsed roles.
 
 The work tree starts with roots only. Click a root or section name to show its immediate children. **Expand all** opens every branch. **Collapse all** returns to the project overview. Both controls respect the current filter. A counter shows the visible work items. Each branch has its own expansion state. Search reveals matching paths and their ancestors. Clearing search restores normal expansion choices. Resource dropdowns remain independent of tree expansion.
