@@ -176,8 +176,9 @@ ${assumptions}
 
 <h2>Load per person and month (% of capacity)</h2>
 <p class="sub">Expand a person to show project hours under each month. Expand a project to show booked tasks and remaining pools. Project rows include pins within their pools.</p>
+<div class="tree-tools"><button type="button" id="person-expand-all" aria-controls="person-load">Expand all</button><button type="button" id="person-collapse-all" aria-controls="person-load">Collapse all</button><span>People, projects and booked tasks · respects the current filter</span></div>
 <div class="legend"><span><i style="background:var(--u)"></i>&lt; 80%</span><span><i style="background:var(--f)"></i>80–100%</span><span><i style="background:var(--o)"></i>&gt; 100%</span><span><i style="background:var(--x)"></i>booked at 0% capacity</span><span><i style="outline:2px dashed var(--acc);outline-offset:-2px"></i>contains requested hours</span></div>
-<div class="wrap"><table><thead><tr><th class="pl">Person</th>${mh}</tr></thead><tbody>${heat}</tbody></table></div>
+<div class="wrap"><table><thead><tr><th class="pl">Person</th>${mh}</tr></thead><tbody id="person-load">${heat}</tbody></table></div>
 
 <h2>Demand vs forecast supply per project (hours: demand above, supply below)</h2>
 <p class="sub">One total per project. Expand Roles for the breakdown. Red cells include shortages in individual roles.</p>
@@ -207,7 +208,10 @@ function run(){var t=q.value.toLowerCase();document.querySelectorAll("tr.f:not(.
 document.querySelectorAll("tr.balance-total").forEach(function(r){var b=r.querySelector(".role-toggle"),panel=document.getElementById(b.getAttribute("aria-controls")),rows=Array.from(panel.querySelectorAll("[data-balance-role]")),projectHit=!t||r.dataset.balanceProject.toLowerCase().indexOf(t)>=0,roleHit=rows.some(function(row){return hit(row,t);}),show=hit(r,t)||roleHit;r.classList.toggle("hide",!show);panel.hidden=!show||b.getAttribute("aria-expanded")!=="true";rows.forEach(function(row){row.hidden=!projectHit&&roleHit&&!hit(row,t);});});runTree(t);}
 document.querySelectorAll(".role-toggle").forEach(function(b){b.addEventListener("click",function(){b.setAttribute("aria-expanded",b.getAttribute("aria-expanded")==="true"?"false":"true");run();});});
 document.querySelectorAll("details[data-person]").forEach(function(d){d.addEventListener("toggle",runPeople);});
-document.querySelectorAll(".person-project-toggle").forEach(function(b){b.addEventListener("click",function(){var open=b.getAttribute("aria-expanded")!=="true";b.setAttribute("aria-expanded",String(open));b.setAttribute("aria-label",(open?"Collapse ":"Expand ")+b.dataset.label);b.querySelector("span").textContent=open?"▾":"▸";runPeople();});});
+function setPersonProject(b,open){b.setAttribute("aria-expanded",String(open));b.setAttribute("aria-label",(open?"Collapse ":"Expand ")+b.dataset.label);b.querySelector("span").textContent=open?"▾":"▸";}
+document.querySelectorAll(".person-project-toggle").forEach(function(b){b.addEventListener("click",function(){setPersonProject(b,b.getAttribute("aria-expanded")!=="true");runPeople();});});
+function peopleAll(open){people.forEach(function(r){r.querySelector("details[data-person]").open=open;});document.querySelectorAll(".person-project-toggle").forEach(function(b){setPersonProject(b,open);});runPeople();}
+document.getElementById("person-expand-all").addEventListener("click",function(){peopleAll(true);});document.getElementById("person-collapse-all").addEventListener("click",function(){peopleAll(false);});
 document.querySelectorAll(".tree-toggle").forEach(function(b){b.addEventListener("click",function(){var path=b.closest("[data-tree-path]").dataset.treePath;if(b.getAttribute("aria-expanded")==="true"){treeExpanded.delete(path);treeSearchClosed.add(path);}else{treeExpanded.add(path);treeSearchClosed.delete(path);}runTree(q.value.toLowerCase());});});
 function treeAll(expand){treeQuery=q.value.toLowerCase();treeExpanded.clear();treeSearchClosed.clear();treeList.forEach(function(r){if(r.querySelector(".tree-toggle")){(expand?treeExpanded:treeSearchClosed).add(r.dataset.treePath);}});runTree(treeQuery);}
 document.getElementById("tree-expand-all").addEventListener("click",function(){treeAll(true);});document.getElementById("tree-collapse-all").addEventListener("click",function(){treeAll(false);});
