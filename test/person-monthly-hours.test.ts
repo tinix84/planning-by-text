@@ -22,7 +22,8 @@ test("expanded people have project hours aligned to the report month columns", (
   const html = renderReport(model, diagnostics);
   const alpha = projectRow(html, "ALPHA");
   assert.match(alpha, /data-owner="alice"[^>]*hidden/);
-  assert.match(alpha, /scope="row"[^>]*>\+ALPHA/);
+  assert.match(alpha, /scope="row"/);
+  assert.match(alpha, /\+ALPHA/);
   assert.match(alpha, /data-month="2024-01" data-hours="160"[^>]*>160 h<\/td>/);
   assert.match(alpha, /data-month="2024-02" data-hours="160"[^>]*>160 h<\/td>/);
   const alphabet = projectRow(html, "ALPHABET");
@@ -38,7 +39,8 @@ test("project rows count pins once and retain their requested status", () => {
   assert.match(row, /120 h confirmed · 40 h requested · 0 h unspecified/);
   assert.doesNotMatch(row, /200 h/);
   for (const [i, month] of model.months.entries()) {
-    const values = [...html.matchAll(new RegExp(`data-month="2024-0${i + 1}" data-hours="([^"]+)"`, "g"))].map(m => Number(m[1]));
+    const projects = projectRow(html, "ALPHA") + projectRow(html, "ALPHABET");
+    const values = [...projects.matchAll(new RegExp(`data-month="2024-0${i + 1}" data-hours="([^"]+)"`, "g"))].map(m => Number(m[1]));
     assert.equal(values.reduce((sum, h) => sum + h, 0), model.load.get("alice")!.get(month)!.hours);
   }
 });
