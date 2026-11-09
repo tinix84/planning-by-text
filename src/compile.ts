@@ -1,6 +1,6 @@
 // The deep module: compile(files) → { model, diagnostics }. Pure: no file system, no clock.
 import { isWorkday, monthKey, monthLabel, workdaysByMonth, workdaysInMonth, monthStart, monthEnd, type Range } from "./dates.ts";
-import { parseFile, type Diag, type Loc, type RoleDemand, type Stmt } from "./parse.ts";
+import { parseEffort, parseFile, type Diag, type Loc, type RoleDemand, type Stmt } from "./parse.ts";
 
 export type SourceFile = { path: string; text: string };
 
@@ -11,7 +11,7 @@ export type Person = {
 export type Calendar = { id: string; hpd: number; hpm: number };
 export type Node = {
   path: string; id: string; parent?: string; children: string[]; root: string;
-  title?: string; own: Range; tags: string[]; effort?: number; roles: RoleDemand[];
+  title?: string; own: Range; tags: string[]; effort?: number; roles: RoleDemand[]; loc?: string;
   after: string[]; left?: number; done?: number; prio?: number;
   decl?: Loc; refs: Loc[]; window?: { s: number; e: number }; emptyWindow?: boolean;
   total: number; remaining: number; // rolled up
@@ -21,7 +21,7 @@ export type Booking = {
   person: string; path: string; pct: number; s: number; e: number; status: BookingStatus; at: Loc;
   hours: Map<number, number>; // month → hours
 };
-export type Cell = { hours: number; capHours: number; confirmed: number; requested: number; parts: { path: string; hours: number; status: BookingStatus }[] };
+export type Cell = { hours: number; capHours: number; confirmed: number; requested: number; unspecified: number; parts: { path: string; hours: number; status: BookingStatus }[] };
 
 export type Model = {
   persons: Map<string, Person>;
@@ -101,6 +101,14 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     }
   }
   const rootDecl = new Map<string, Loc>();
+  // Keep effort units until inherited calendars are known.
+  const effortText = new Map<string, string>(), leftText = new Map<string, string>();
+  const defaultRoles = (value?: string): RoleDemand[] => value ? value.split(",").filter(Boolean).map((role) => ({ role })) : [];
+  const setCalendar = (n: Node, loc: string | undefined, at: Loc) => {
+    if (loc === undefined) return;
+    if (!model.calendars.has(loc)) D("error", "E003", `unknown calendar loc:${loc} for +${n.path}`, at);
+    n.loc = loc;
+  };
   const ensureNode = (path: string): Node => {
     let n = model.nodes.get(path);
     if (n) return n;
@@ -117,9 +125,12 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     rootDecl.set(s.path, s.at);
     model.roots.add(s.path);
     const n = ensureNode(s.path);
-    Object.assign(n, { title: s.title, own: s.range, tags: s.tags, decl: s.at });
+    Object.assign(n, { title: s.title, own: s.range, tags: s.tags, roles: defaultRoles(s.attrs.other.role),
+      after: s.attrs.after, done: s.attrs.done, prio: s.attrs.prio, decl: s.at });
+    setCalendar(n, s.attrs.other.loc, s.at);
+    if (s.effort !== undefined) effortText.set(s.path, s.effort);
+    if (s.attrs.left !== undefined) leftText.set(s.path, s.attrs.left);
   }
-  // budgets on roots: "~" is parsed only on task lines; a root can carry a budget with a separate task line "+ROOT ~h"
   const rootOk = (path: string, at: Loc): boolean => {
     const r = path.split(".")[0];
     if (model.roots.has(r)) return true;
@@ -133,14 +144,18 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     if (!rootOk(s.path, s.at)) continue;
     const n = ensureNode(s.path);
     if (n.decl && s.path.includes(".")) { D("error", "E005", `+${s.path} already declared at ${n.decl.file}:${n.decl.line}`, s.at); continue; }
+    if (s.effort !== undefined && effortText.has(s.path)) { D("error", "E005", `+${s.path} has more than one effort budget`, s.at); continue; }
     if (!n.decl) n.decl = s.at;
     if (s.title) n.title = s.title;
     if (s.range.start !== undefined || s.range.end !== undefined) n.own = s.range;
     n.tags.push(...s.tags);
-    if (s.effort !== undefined) n.effort = s.effort;
-    n.roles.push(...s.roles);
+    if (s.effort !== undefined) effortText.set(s.path, s.effort);
+    if (s.roles.length) n.roles = s.roles;
+    else if (s.attrs.other.role) n.roles = defaultRoles(s.attrs.other.role);
     n.after.push(...s.attrs.after);
-    n.left = s.attrs.left ?? n.left; n.done = s.attrs.done ?? n.done; n.prio = s.attrs.prio ?? n.prio;
+    if (s.attrs.left !== undefined) leftText.set(s.path, s.attrs.left);
+    setCalendar(n, s.attrs.other.loc, s.at);
+    n.done = s.attrs.done ?? n.done; n.prio = s.attrs.prio ?? n.prio;
   }
 
   // 3. capacity changes and bookings (references)
@@ -176,6 +191,22 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     const active = p.caps.filter((c) => c.s <= day && day <= c.e);
     return active.length ? Math.min(...active.map((c) => c.cap)) : p.cap;
   };
+
+  const inherit = (path: string, parent?: Node): void => {
+    const n = model.nodes.get(path)!;
+    n.tags = [...new Set([...(parent?.tags ?? []), ...n.tags])];
+    if (!n.roles.length && parent) n.roles = parent.roles.map((r) => ({ ...r }));
+    n.loc ??= parent?.loc;
+    const calendar = n.loc ? model.calendars.get(n.loc) : undefined;
+    try {
+      if (effortText.has(path)) n.effort = parseEffort(effortText.get(path)!, calendar?.hpm ?? defHpm, calendar?.hpd ?? 8);
+      if (leftText.has(path)) n.left = parseEffort(leftText.get(path)!, calendar?.hpm ?? defHpm, calendar?.hpd ?? 8);
+    } catch (e) {
+      D("error", "E001", (e as Error).message, n.decl);
+    }
+    for (const child of n.children) inherit(child, n);
+  };
+  for (const root of model.roots) inherit(root);
 
   // 4. windows (inheritance + after:)
   const resolveRef = (from: string, ref: string): string => {
@@ -307,20 +338,40 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     const hours = new Map<number, number>();
     for (const [k, wd] of workdaysByMonth(st, en)) { hours.set(k, s.pct * hpmOf(p) * wd / workdaysInMonth(k)); months.add(k); }
     model.bookings.push({ person: s.person, path: s.path, pct: s.pct, s: st, e: en, status, at: s.at, hours });
-    if (s.pct > 0) {
-      for (let day = st; day <= en; day++) {
+  }
+  const bookingKey = (b: Booking) => JSON.stringify([b.person, b.path, b.pct, b.s, b.e]);
+  const byLocation = (a: Booking, b: Booking) => a.at.file.localeCompare(b.at.file) || a.at.line - b.at.line;
+  const confirmations = new Map<string, Booking[]>();
+  for (const b of [...model.bookings].sort(byLocation)) {
+    if (b.status !== "confirmed") continue;
+    const key = bookingKey(b);
+    if (!confirmations.has(key)) confirmations.set(key, []);
+    confirmations.get(key)!.push(b);
+  }
+  const replaced = new Set<Booking>();
+  for (const b of [...model.bookings].sort(byLocation)) {
+    if (b.status !== "requested") continue;
+    const confirmation = confirmations.get(bookingKey(b))?.shift();
+    if (!confirmation) continue;
+    replaced.add(b);
+    D("info", "I202", `request confirmed at ${confirmation.at.file}:${confirmation.at.line}`, b.at);
+  }
+  model.bookings = model.bookings.filter((b) => !replaced.has(b));
+  for (const b of model.bookings) {
+    const p = model.persons.get(b.person)!;
+    if (b.pct > 0) {
+      for (let day = b.s; day <= b.e; day++) {
         if (isWorkday(day) && capacityAt(p, day) === 0) {
-          D("warning", "W102", `@${s.person} has zero capacity during its booking on +${s.path}`, s.at);
+          D("warning", "W102", `@${b.person} has zero capacity during its booking on +${b.path}`, b.at);
           break;
         }
       }
     }
-    if (status === "requested") D("info", "I201", `requested booking: @${s.person} +${s.path} ${Math.round(s.pct * 100)}%`, s.at);
+    if (b.status === "requested") D("info", "I201", `requested booking: @${b.person} +${b.path} ${Math.round(b.pct * 100)}%`, b.at);
   }
 
   // 8. load with pools and pins
   model.months = [...months].sort((a, b) => a - b);
-  const isAnc = (a: string, b: string) => b.startsWith(a + ".");
   const byPerson = new Map<string, Booking[]>();
   for (const b of model.bookings) { if (!byPerson.has(b.person)) byPerson.set(b.person, []); byPerson.get(b.person)!.push(b); }
   for (const p of model.persons.values()) {
@@ -336,7 +387,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
         if (isWorkday(day)) capH += capacityAt(p, day);
       capH = capH / wdm * hpmOf(p);
       const active = bs.filter((b) => (b.hours.get(k) ?? 0) > 0);
-      const cell: Cell = { hours: 0, capHours: capH, confirmed: 0, requested: 0, parts: [] };
+      const cell: Cell = { hours: 0, capHours: capH, confirmed: 0, requested: 0, unspecified: 0, parts: [] };
       const groups = new Map<string, Booking[]>();
       for (const b of active) {
         if (!groups.has(b.path)) groups.set(b.path, []);
@@ -353,26 +404,30 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
         } else tops.push(path);
       }
       const ownHours = (path: string) => groups.get(path)!.reduce((sum, b) => sum + b.hours.get(k)!, 0);
-      const effectiveHours = (path: string): number => {
+      const effectiveParts = (path: string): Cell["parts"] => {
         const own = ownHours(path);
         const pins = children.get(path) ?? [];
-        const pinSum = pins.reduce((sum, child) => sum + effectiveHours(child), 0);
+        const parts = pins.flatMap(effectiveParts);
+        const pinSum = parts.reduce((sum, part) => sum + part.hours, 0);
         if (pinSum > own + EPS && !pinWarned.has(path)) {
           pinWarned.add(path);
           D("warning", "W105", `@${p.id}: bookings under +${path} need ${Math.round(pinSum)} h in ${monthLabel(k)}, more than the pool's ${Math.round(own)} h`, groups.get(pins[0])![0].at);
         }
-        return Math.max(own, pinSum);
+        const residual = Math.max(0, own - pinSum);
+        for (const b of groups.get(path)!)
+          parts.push({ path, hours: residual * b.hours.get(k)! / own, status: b.status });
+        return parts;
       };
       for (const path of tops) {
-        const eff = effectiveHours(path);
+        const parts = effectiveParts(path);
+        const eff = parts.reduce((sum, part) => sum + part.hours, 0);
         cell.hours += eff;
-        for (const b of groups.get(path)!) {
-          const h = eff * b.hours.get(k)! / ownHours(path);
-          if (b.status === "requested") cell.requested += h; else cell.confirmed += h;
-          cell.parts.push({ path, hours: h, status: b.status });
+        for (const part of parts) {
+          if (part.status === "requested") cell.requested += part.hours;
+          else if (part.status === "confirmed") cell.confirmed += part.hours;
+          else cell.unspecified += part.hours;
         }
-        for (const b of active.filter((b) => isAnc(path, b.path)))
-          cell.parts.push({ path: b.path, hours: 0, status: b.status });
+        cell.parts.push(...parts);
         const role = p.roles[0] ?? "(no role)";
         add3(model.supply, path.split(".")[0], role, k, eff);
       }

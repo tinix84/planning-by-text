@@ -32,6 +32,8 @@ export async function writeXlsx(model: Model, diags: Diag[], out: string): Promi
     }
     hours.addRow([r.person, r.role, "booked", ...r.cells.map((c) => (c ? Math.round(c.hours * 10) / 10 : 0))]);
     hours.addRow([r.person, r.role, "capacity", ...r.cells.map((c) => (c ? Math.round(c.capHours * 10) / 10 : 0))]);
+    for (const status of ["confirmed", "requested", "unspecified"] as const)
+      hours.addRow([r.person, r.role, status, ...r.cells.map((c) => Math.round((c?.[status] ?? 0) * 10) / 10)]);
   }
 
   const rb = wb.addWorksheet("RoleBalance");
