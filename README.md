@@ -92,7 +92,7 @@ To confirm a request, add the same booking under `teams/` or use `status:confirm
 
 ## Usage
 
-In the HTML report, click a person's name to expand their bookings and work paths. Click a project in the project balance, or **Resources** beneath a work-tree root, to see its booked people. Each entry shows the percentage, resolved dates, booking status, and pool/pin context. Expanders also work with the keyboard. Project pools retain unspecified task assignments. Scenario reports can display an explicit list of unverified assumptions.
+In the HTML report, click a person's name to expand their bookings and work paths. Click a project in the project balance, or **Resources** beneath a work-tree root, to see its booked people. Each entry shows booked hours over its date range, percentage, resolved dates, booking status, and pool/pin context. Pins consume their pool, so their hours are included in the pool's hours. Monthly load cells show percentages with the percent sign. Expanders also work with the keyboard. Project pools retain unspecified task assignments. Scenario reports can display an explicit list of unverified assumptions.
 
 The demand/supply table shows one total row per project. Click **Roles** to expand the monthly role breakdown. Red project cells retain individual role-shortfall signals, including when the total supply covers the total demand. The text filter also matches collapsed roles.
 
