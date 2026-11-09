@@ -1,16 +1,41 @@
 // Self-contained HTML report: inline CSS + a tiny filter script, light and dark.
 import type { Diag } from "./parse.ts";
-import type { Model } from "./compile.ts";
+import type { Booking, Model } from "./compile.ts";
+import { fmt } from "./dates.ts";
 import { loadPct, loadRows, monthHeaders, roleRows, treeRows } from "./views.ts";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const r0 = (x: number) => Math.round(x).toString();
 
-export function renderReport(model: Model, diags: Diag[], opts: { title?: string; generated?: string } = {}): string {
+export function renderReport(model: Model, diags: Diag[], opts: { title?: string; generated?: string; assumptions?: string[] } = {}): string {
   const months = monthHeaders(model);
   const mh = months.map((m) => `<th class="m">${m.slice(2)}</th>`).join("");
   const counts = { error: 0, warning: 0, info: 0 };
   for (const d of diags) counts[d.level]++;
+
+  const byPerson = new Map<string, Booking[]>();
+  for (const b of model.bookings) {
+    if (!byPerson.has(b.person)) byPerson.set(b.person, []);
+    byPerson.get(b.person)!.push(b);
+  }
+  const bookingInfo = (b: Booking): string => {
+    const node = model.nodes.get(b.path);
+    const pin = (byPerson.get(b.person) ?? []).some(parent => b.path.startsWith(parent.path + ".") && b.s <= parent.e && parent.s <= b.e);
+    const kind = pin ? "pin" : node?.children.length ? "pool" : b.path === node?.root ? "project booking" : "booking";
+    return `<span class="mono">+${esc(b.path)}</span>${node?.title ? ` — ${esc(node.title)}` : ""}<small>${Math.round(b.pct * 1000) / 10}% · ${fmt(b.s)}..${fmt(b.e)} · ${esc(b.status)} · ${kind}</small>`;
+  };
+  const personDetails = (id: string, name: string): string => {
+    const bookings = byPerson.get(id) ?? [];
+    const body = bookings.length ? `<ul>${bookings.map(b => `<li>${bookingInfo(b)}</li>`).join("")}</ul>` : "<p>No bookings recorded.</p>";
+    return `<details class="drill" data-person="${esc(id)}"><summary>${esc(name)}</summary><div class="drill-body">${body}<p>Project bookings and pools do not identify individual task assignments. Pins consume their pool.</p></div></details>`;
+  };
+  const projectDetails = (path: string): string => {
+    const bookings = model.bookings.filter(b => b.path === path || b.path.startsWith(path + "."));
+    const body = bookings.length ? `<ul>${bookings.map(b => `<li><strong>${esc(model.persons.get(b.person)?.name ?? b.person)}</strong> <span class="mono">@${esc(b.person)}</span><br>${bookingInfo(b)}</li>`).join("")}</ul>` : "<p>No bookings recorded.</p>";
+    return `<details class="drill" data-project="${esc(path)}"><summary>+${esc(path)}</summary><div class="drill-body">${body}<p>Booking percentages are shares of full time. Pins consume their pool.</p></div></details>`;
+  };
+  const assumptions = opts.assumptions?.length
+    ? `<aside class="assumptions"><details open><summary>Scenario assumptions — unverified (${opts.assumptions.length})</summary><ul>${opts.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details></aside>` : "";
 
   const diagRows = diags.map((d) =>
     `<tr class="f lv-${d.level}"><td><span class="tag ${d.level}">${d.code}</span></td><td class="mono">${esc(d.loc ? `${d.loc.file}:${d.loc.line}` : "")}</td><td>${esc(d.msg)}</td></tr>`).join("");
@@ -25,7 +50,7 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
         c!.parts.filter((x) => x.hours > 0).map((x) => `+${x.path}: ${r0(x.hours)} h (${x.status})`).join("\n");
       return `<td class="h ${band}${c!.requested ? " rq" : ""}" title="${esc(tip)}">${isFinite(p) ? Math.round(p * 100) : "∞"}</td>`;
     }).join("");
-    return `<tr class="f"><th class="pl">${esc(r.name)}<small> @${esc(r.person)} · ${esc(r.role || "no role")} · ${Math.round(r.cap * 100)}%</small></th>${cells}</tr>`;
+    return `<tr class="f"><th class="pl">${personDetails(r.person, r.name)}<small> @${esc(r.person)} · ${esc(r.role || "no role")} · baseline capacity ${Math.round(r.cap * 100)}%</small></th>${cells}</tr>`;
   }).join("");
 
   const roles = roleRows(model).map((r) => {
@@ -35,11 +60,11 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
       const cls = d > s + 0.5 ? "short" : "ok";
       return `<td class="b ${cls}" title="demand ${r0(d)} h / forecast supply ${r0(s)} h"><span>${r0(d)}</span><span>${r0(s)}</span></td>`;
     }).join("");
-    return `<tr class="f"><th class="pl">+${esc(r.root)}<small> ?${esc(r.role)}</small></th>${cells}</tr>`;
+    return `<tr class="f"><th class="pl">${projectDetails(r.root)}<small> ?${esc(r.role)}</small></th>${cells}</tr>`;
   }).join("");
 
   const tree = treeRows(model).map((t) =>
-    `<tr class="f${t.declared ? "" : " undecl"}"><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${esc(t.path)}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td><td class="mono">${esc(t.profile)}</td></tr>`).join("");
+    `<tr class="f${t.declared ? "" : " undecl"}"><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${t.depth === 0 ? projectDetails(t.path) : esc(t.path)}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td><td class="mono">${esc(t.profile)}</td></tr>`).join("");
 
   const title = opts.title ?? "Resource plan";
   return `<!doctype html>
@@ -67,8 +92,14 @@ td.b{font-size:11px;text-align:center;font-variant-numeric:tabular-nums}td.b spa
 tr.undecl td{color:var(--mut);font-style:italic}.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin:6px 0}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
 .hide{display:none}
+.drill summary{cursor:pointer;color:var(--acc);white-space:normal}.drill summary:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.drill[open]{min-width:290px;max-width:430px}.drill-body{white-space:normal;font-weight:400;font-size:12px;max-height:320px;overflow:auto;padding:6px 2px}
+.drill-body ul{padding-left:18px;margin:4px 0}.drill-body li{margin:0 0 10px;overflow-wrap:anywhere}.drill-body p{color:var(--mut);font-size:11px;margin:8px 0}
+.drill-body small{display:block;color:var(--mut);font-weight:400}.assumptions{border:1px solid var(--ff);background:var(--f);padding:12px 16px;border-radius:8px;margin:12px 0}
+.assumptions summary{cursor:pointer;font-weight:600}.assumptions li{margin-top:6px}
 </style></head><body><main>
 <h1>${esc(title)}</h1>
+${assumptions}
 <p class="sub">${model.persons.size} people · ${model.roots.size} roots · ${model.bookings.length} bookings · ${months[0] ?? ""}–${months[months.length - 1] ?? ""}${opts.generated ? ` · generated ${esc(opts.generated)}` : ""}</p>
 <div class="bar"><input id="q" placeholder="Filter people, projects, roles, messages…" aria-label="Filter">
 <label class="pill"><input type="checkbox" id="noinfo" checked style="min-width:0"> hide info</label>
