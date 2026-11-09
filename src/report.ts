@@ -29,10 +29,10 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
     const body = bookings.length ? `<ul>${bookings.map(b => `<li>${bookingInfo(b)}</li>`).join("")}</ul>` : "<p>No bookings recorded.</p>";
     return `<details class="drill" data-person="${esc(id)}"><summary>${esc(name)}</summary><div class="drill-body">${body}<p>Project bookings and pools do not identify individual task assignments. Pins consume their pool.</p></div></details>`;
   };
-  const projectDetails = (path: string): string => {
+  const projectDetails = (path: string, label = `+${path}`): string => {
     const bookings = model.bookings.filter(b => b.path === path || b.path.startsWith(path + "."));
     const body = bookings.length ? `<ul>${bookings.map(b => `<li><strong>${esc(model.persons.get(b.person)?.name ?? b.person)}</strong> <span class="mono">@${esc(b.person)}</span><br>${bookingInfo(b)}</li>`).join("")}</ul>` : "<p>No bookings recorded.</p>";
-    return `<details class="drill" data-project="${esc(path)}"><summary>+${esc(path)}</summary><div class="drill-body">${body}<p>Booking percentages are shares of full time. Pins consume their pool.</p></div></details>`;
+    return `<details class="drill" data-project="${esc(path)}"><summary>${esc(label)}</summary><div class="drill-body">${body}<p>Booking percentages are shares of full time. Pins consume their pool.</p></div></details>`;
   };
   const assumptions = opts.assumptions?.length
     ? `<aside class="assumptions"><details open><summary>Scenario assumptions — unverified (${opts.assumptions.length})</summary><ul>${opts.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></details></aside>` : "";
@@ -76,8 +76,15 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
       `<tr class="balance-panel" id="${esc(panel)}" hidden><td colspan="${model.months.length + 1}"><table><thead><tr><th>Role</th>${mh}</tr></thead><tbody>${breakdown}</tbody></table></td></tr>`;
   }).join("");
 
-  const tree = treeRows(model).map((t) =>
-    `<tr class="f${t.declared ? "" : " undecl"}"><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${t.depth === 0 ? projectDetails(t.path) : esc(t.path)}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td><td class="mono">${esc(t.profile)}</td></tr>`).join("");
+  const tree = treeRows(model).map(t => {
+    const node = model.nodes.get(t.path)!;
+    const controls = node.children.map(path => `tree-${path}`).join(" ");
+    const search = [t.path, t.title, t.roles, t.window, t.tags, t.profile].join(" ").toLowerCase();
+    const label = node.children.length
+      ? `<button type="button" class="tree-toggle" aria-expanded="false" aria-controls="${esc(controls)}" aria-label="Expand ${esc(t.path)}"><span class="tree-arrow" aria-hidden="true">▸</span> ${esc(t.path)}</button>`
+      : esc(t.path);
+    return `<tr class="f tree-row${t.declared ? "" : " undecl"}" id="tree-${esc(t.path)}" data-tree-path="${esc(t.path)}" data-tree-parent="${esc(node.parent ?? "")}" data-tree-search="${esc(search)}"${node.parent ? " hidden" : ""}><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${label}${t.depth === 0 ? projectDetails(t.path, "Resources") : ""}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td><td class="mono">${esc(t.profile)}</td></tr>`;
+  }).join("");
 
   const title = opts.title ?? "Resource plan";
   return `<!doctype html>
@@ -113,6 +120,9 @@ tr.undecl td{color:var(--mut);font-style:italic}.legend{display:flex;gap:10px;fl
 .role-toggle{display:block;margin-top:6px;padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:var(--card);color:var(--acc);font:inherit;font-size:12px;cursor:pointer}
 .role-toggle:focus-visible{outline:2px solid var(--acc);outline-offset:2px}.balance-panel>td{padding:8px 12px;background:var(--bg)}
 .balance-panel table{background:var(--card)}tr[hidden]{display:none}
+.tree-toggle{border:0;background:transparent;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-align:left}
+.tree-toggle:focus-visible{outline:2px solid var(--acc);outline-offset:3px}.tree-arrow{display:inline-block;width:12px}
+.tree-row .drill{margin-top:4px;font-size:11px}.tree-row .drill[open]{min-width:290px}
 </style></head><body><main>
 <h1>${esc(title)}</h1>
 ${assumptions}
@@ -133,14 +143,22 @@ ${assumptions}
 <div class="wrap"><table><thead><tr><th>Code</th><th>Where</th><th>Message</th></tr></thead><tbody id="diags">${diagRows || `<tr><td colspan=3>No findings.</td></tr>`}</tbody></table></div>
 
 <h2>Work tree</h2>
-<div class="wrap"><table><thead><tr><th>Node</th><th>Title</th><th class="num">Effort h</th><th class="num">Left h</th><th>Roles</th><th>Window</th><th>Tags</th><th>Profile</th></tr></thead><tbody>${tree}</tbody></table></div>
+<p class="sub">Expand a root or section to show its children. Resources opens the project's bookings. Search reveals matching paths.</p>
+<div class="wrap"><table><thead><tr><th>Node</th><th>Title</th><th class="num">Effort h</th><th class="num">Left h</th><th>Roles</th><th>Window</th><th>Tags</th><th>Profile</th></tr></thead><tbody id="work-tree">${tree}</tbody></table></div>
 </main>
 <script>
 (function(){var q=document.getElementById("q"),ni=document.getElementById("noinfo");
 function hit(r,t){return !t||r.textContent.toLowerCase().indexOf(t)>=0||r.innerHTML.toLowerCase().indexOf(t)>=0;}
-function run(){var t=q.value.toLowerCase();document.querySelectorAll("tr.f:not(.balance-total)").forEach(function(r){var info=ni.checked&&r.classList.contains("lv-info");r.classList.toggle("hide",!hit(r,t)||info);});
-document.querySelectorAll("tr.balance-total").forEach(function(r){var b=r.querySelector(".role-toggle"),panel=document.getElementById(b.getAttribute("aria-controls")),rows=Array.from(panel.querySelectorAll("[data-balance-role]")),projectHit=hit(r,t),show=projectHit||rows.some(function(row){return hit(row,t);});r.classList.toggle("hide",!show);panel.hidden=!show||b.getAttribute("aria-expanded")!=="true";rows.forEach(function(row){row.hidden=!projectHit&&!hit(row,t);});});}
+var treeList=Array.from(document.querySelectorAll("#work-tree [data-tree-path]")),treeIndex=new Map(treeList.map(function(r){return [r.dataset.treePath,r];})),treeExpanded=new Set(),treeSearchClosed=new Set(),treeQuery="";
+function parents(path){var out=[],r=treeIndex.get(path),p=r&&r.dataset.treeParent;while(p){out.push(p);r=treeIndex.get(p);p=r&&r.dataset.treeParent;}return out;}
+function runTree(t){if(t!==treeQuery){treeSearchClosed.clear();treeQuery=t;}var context=new Set(),forced=new Set();
+if(t){var matches=new Set(treeList.filter(function(r){return r.dataset.treeSearch.indexOf(t)>=0;}).map(function(r){return r.dataset.treePath;}));var tops=new Set(Array.from(matches).filter(function(path){return !parents(path).some(function(p){return matches.has(p);});}));tops.forEach(function(path){context.add(path);parents(path).forEach(function(p){context.add(p);forced.add(p);});});treeList.forEach(function(r){if(parents(r.dataset.treePath).some(function(p){return tops.has(p);}))context.add(r.dataset.treePath);});}
+function opened(path){return (treeExpanded.has(path)||forced.has(path))&&!treeSearchClosed.has(path);}
+treeList.forEach(function(r){var path=r.dataset.treePath;r.hidden=!!t&&!context.has(path)||!parents(path).every(opened);var b=r.querySelector(".tree-toggle");if(b){var open=opened(path);b.setAttribute("aria-expanded",String(open));b.setAttribute("aria-label",(open?"Collapse ":"Expand ")+path);b.querySelector(".tree-arrow").textContent=open?"▾":"▸";}});}
+function run(){var t=q.value.toLowerCase();document.querySelectorAll("tr.f:not(.balance-total):not(.tree-row)").forEach(function(r){var info=ni.checked&&r.classList.contains("lv-info");r.classList.toggle("hide",!hit(r,t)||info);});
+document.querySelectorAll("tr.balance-total").forEach(function(r){var b=r.querySelector(".role-toggle"),panel=document.getElementById(b.getAttribute("aria-controls")),rows=Array.from(panel.querySelectorAll("[data-balance-role]")),projectHit=hit(r,t),show=projectHit||rows.some(function(row){return hit(row,t);});r.classList.toggle("hide",!show);panel.hidden=!show||b.getAttribute("aria-expanded")!=="true";rows.forEach(function(row){row.hidden=!projectHit&&!hit(row,t);});});runTree(t);}
 document.querySelectorAll(".role-toggle").forEach(function(b){b.addEventListener("click",function(){b.setAttribute("aria-expanded",b.getAttribute("aria-expanded")==="true"?"false":"true");run();});});
+document.querySelectorAll(".tree-toggle").forEach(function(b){b.addEventListener("click",function(){var path=b.closest("[data-tree-path]").dataset.treePath;if(b.getAttribute("aria-expanded")==="true"){treeExpanded.delete(path);treeSearchClosed.add(path);}else{treeExpanded.add(path);treeSearchClosed.delete(path);}runTree(q.value.toLowerCase());});});
 q.addEventListener("input",run);ni.addEventListener("change",run);run();})();
 </script></body></html>`;
 }
