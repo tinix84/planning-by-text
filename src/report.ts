@@ -39,7 +39,7 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
   }).join("");
 
   const tree = treeRows(model).map((t) =>
-    `<tr class="f${t.declared ? "" : " undecl"}"><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${esc(t.path)}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td></tr>`).join("");
+    `<tr class="f${t.declared ? "" : " undecl"}"><td class="mono" style="padding-left:${0.5 + t.depth * 1.1}rem">${esc(t.path)}</td><td>${esc(t.title)}</td><td class="num">${t.effort ? r0(t.effort) : ""}</td><td class="num">${t.remaining && t.remaining !== t.effort ? r0(t.remaining) : ""}</td><td class="mono">${esc(t.roles)}</td><td class="mono">${esc(t.window)}</td><td>${esc(t.tags)}</td><td class="mono">${esc(t.profile)}</td></tr>`).join("");
 
   const title = opts.title ?? "Resource plan";
   return `<!doctype html>
@@ -85,7 +85,7 @@ tr.undecl td{color:var(--mut);font-style:italic}.legend{display:flex;gap:10px;fl
 <div class="wrap"><table><thead><tr><th>Code</th><th>Where</th><th>Message</th></tr></thead><tbody id="diags">${diagRows || `<tr><td colspan=3>No findings.</td></tr>`}</tbody></table></div>
 
 <h2>Work tree</h2>
-<div class="wrap"><table><thead><tr><th>Node</th><th>Title</th><th class="num">Effort h</th><th class="num">Left h</th><th>Roles</th><th>Window</th><th>Tags</th></tr></thead><tbody>${tree}</tbody></table></div>
+<div class="wrap"><table><thead><tr><th>Node</th><th>Title</th><th class="num">Effort h</th><th class="num">Left h</th><th>Roles</th><th>Window</th><th>Tags</th><th>Profile</th></tr></thead><tbody>${tree}</tbody></table></div>
 </main>
 <script>
 (function(){var q=document.getElementById("q"),ni=document.getElementById("noinfo");

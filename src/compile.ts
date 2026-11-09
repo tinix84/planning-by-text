@@ -1,6 +1,7 @@
 // The deep module: compile(files) → { model, diagnostics }. Pure: no file system, no clock.
 import { isWorkday, monthKey, monthLabel, workdaysByMonth, workdaysInMonth, monthStart, monthEnd, type Range } from "./dates.ts";
 import { parseEffort, parseFile, type Diag, type Loc, type RoleDemand, type Stmt } from "./parse.ts";
+import { compileCompetencies, type Competency, type Profile, type Assessment } from "./competencies.ts";
 
 export type SourceFile = { path: string; text: string };
 
@@ -11,7 +12,7 @@ export type Person = {
 export type Calendar = { id: string; hpd: number; hpm: number };
 export type Node = {
   path: string; id: string; parent?: string; children: string[]; root: string;
-  title?: string; own: Range; tags: string[]; effort?: number; roles: RoleDemand[]; loc?: string;
+  title?: string; own: Range; tags: string[]; effort?: number; roles: RoleDemand[]; loc?: string; profile?: string;
   after: string[]; left?: number; done?: number; prio?: number;
   decl?: Loc; refs: Loc[]; window?: { s: number; e: number }; emptyWindow?: boolean;
   total: number; remaining: number; // rolled up
@@ -24,6 +25,9 @@ export type Booking = {
 export type Cell = { hours: number; capHours: number; confirmed: number; requested: number; unspecified: number; parts: { path: string; hours: number; status: BookingStatus }[] };
 
 export type Model = {
+  competencies: Map<string, Competency>;
+  profiles: Map<string, Profile>;
+  assessments: Map<string, Assessment>;
   persons: Map<string, Person>;
   calendars: Map<string, Calendar>;
   roots: Set<string>;
@@ -80,6 +84,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
   for (const f of files) stmts.push(...parseFile(f.text, f.path, diags));
 
   const model: Model = {
+    competencies: new Map(), profiles: new Map(), assessments: new Map(),
     persons: new Map(), calendars: new Map(), roots: new Set(), nodes: new Map(), bookings: [],
     months: [], load: new Map(), demand: new Map(), supply: new Map(),
   };
@@ -137,7 +142,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     model.roots.add(s.path);
     const n = ensureNode(s.path);
     Object.assign(n, { title: s.title, own: s.range, tags: s.tags, roles: defaultRoles(s.attrs.other.role),
-      after: s.attrs.after, done: s.attrs.done, prio: s.attrs.prio, decl: s.at });
+      after: s.attrs.after, done: s.attrs.done, prio: s.attrs.prio, profile: s.attrs.other.profile, decl: s.at });
     setCalendar(n, s.attrs.other.loc, s.at);
     if (s.effort !== undefined) effortText.set(s.path, s.effort);
     if (s.attrs.left !== undefined) leftText.set(s.path, s.attrs.left);
@@ -164,6 +169,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     if (s.roles.length) n.roles = s.roles;
     else if (s.attrs.other.role) n.roles = defaultRoles(s.attrs.other.role);
     n.after.push(...s.attrs.after);
+    n.profile = s.attrs.other.profile ?? n.profile;
     if (s.attrs.left !== undefined) leftText.set(s.path, s.attrs.left);
     setCalendar(n, s.attrs.other.loc, s.at);
     n.done = s.attrs.done ?? n.done; n.prio = s.attrs.prio ?? n.prio;
@@ -208,6 +214,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     n.tags = [...new Set([...(parent?.tags ?? []), ...n.tags])];
     if (!n.roles.length && parent) n.roles = parent.roles.map((r) => ({ ...r }));
     n.loc ??= parent?.loc;
+    n.profile ??= parent?.profile;
     const calendar = n.loc ? model.calendars.get(n.loc) : undefined;
     try {
       if (effortText.has(path)) n.effort = parseEffort(effortText.get(path)!, calendar?.hpm ?? defHpm, calendar?.hpd ?? 8);
@@ -463,6 +470,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     }
   }
 
+  compileCompetencies(stmts, model, diags);
   diags.sort((a, b) => (a.loc?.file ?? "").localeCompare(b.loc?.file ?? "") || (a.loc?.line ?? 0) - (b.loc?.line ?? 0));
   return { model, diagnostics: diags };
 }

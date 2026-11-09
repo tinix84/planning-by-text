@@ -19,5 +19,7 @@
 
 ## Comments
 
+- 2026-11-06: Ticket 09 separates qualification profiles from planning roles. Imported snapshots can provide role declarations without manual edits to existing planning files.
+
 - 2026-11-06: implemented in the first prototype commit; tests in `test/`. Review the breakdown and reopen or split if needed.
 - 2026-11-06: regressions in `test/parser-validation.test.ts` cover invalid ISO weeks, malformed ranges, relative-duration limits, declaration syntax, duplicates, and undeclared references. Four-digit years retain their value instead of receiving JavaScript's 1900 offset. Private planning inputs remain unchanged.

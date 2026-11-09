@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { compile, type SourceFile } from "./compile.ts";
 import { dayNum, fmt } from "./dates.ts";
 import { renderReport } from "./report.ts";
+import { profileRows } from "./views.ts";
 
 export function readPlan(dir: string): SourceFile[] {
   const root = resolve(dir);
@@ -27,6 +28,9 @@ const USAGE = `usage:
   pbt lint   <dir> [--info]           print diagnostics, exit 1 on errors
   pbt report <dir> [-o plan.html]      write the self-contained HTML report
   pbt xlsx   <dir> [-o plan.xlsx]      write the spreadsheet export
+  pbt match  <dir> --profile ID        print qualification checks as JSON
+  pbt match  <dir> --task ROOT.task    use the task's inherited profile
+matching: --include-inactive includes people marked inactive; no bookings are changed
 options: --as-of YYYY-MM-DD (date from which remaining effort is spread; default today)`;
 
 async function main(argv: string[]): Promise<number> {
@@ -39,6 +43,16 @@ async function main(argv: string[]): Promise<number> {
   if (!files.length) { console.error(`no .pbt files under ${dir}`); return 2; }
   const { model, diagnostics } = compile(files, { asOf });
   const errors = diagnostics.filter((d) => d.level === "error").length;
+
+  if (cmd === "match") {
+    const profileArg = flag("--profile"), task = flag("--task");
+    if (errors) { console.error("Plan has errors. Run lint before matching."); return 1; }
+    if (!!profileArg === !!task) { console.error("Specify one --profile ID or --task PATH."); return 2; }
+    const profile = profileArg ?? model.nodes.get(task!.replace(/^\+/, ""))?.profile;
+    if (!profile || !model.profiles.has(profile)) { console.error("No known qualification profile selected."); return 2; }
+    console.log(JSON.stringify(profileRows(model, profile, rest.includes("--include-inactive")), null, 2));
+    return 0;
+  }
 
   if (cmd === "lint") {
     const showInfo = rest.includes("--info");

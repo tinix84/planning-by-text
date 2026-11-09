@@ -33,7 +33,45 @@ Dates: `2024-03`, `2024-Q2`, `2024-W10`, `2024-03-15`, `2024-03..+3m`. ISO only;
 
 Week 53 must exist in the named ISO year. For example, `2020-W53` is valid and `2021-W53` is an error. Ranges accept one `..` separator and at least one endpoint. Relative durations must be positive integers with an explicit start and a representable end date.
 
-Declare every referenced role once, for example `role CONN.SW "Connection software"`. Role IDs are case-sensitive. `role:CONN.SW` and `?CONN.SW` require that exact declaration. Forward declarations and declarations in separate files are valid. Existing plans without role declarations now report E003 until their registry contains the referenced roles.
+Declare every referenced planning role once, for example `role CONN.SW "Connection software"`. Role IDs are case-sensitive. `role:CONN.SW` and `?CONN.SW` require that exact declaration. Forward declarations and declarations in separate files are valid. Importers can generate these declarations from existing references. Review generated IDs for spelling errors.
+
+## Competencies and qualification profiles
+
+Planning roles group hours. Qualification profiles define minimum competency levels. A person can match several profiles while supplying each booking's hours once.
+
+```text
+competency CIRCUITS "Circuit design"
+competency REVIEW "Design review"
+profile Senior_HW "Senior hardware" CIRCUITS:3 REVIEW:2
+assessment @alice active:true CIRCUITS:4 REVIEW:1
++ALPHA.pfc.design ~328h ?POW profile:Senior_HW
+```
+
+Levels are integers from 0 through 4. Positive profile levels are requirements. Assessment zero or an absent value means not assessed. Profile zero means not required.
+
+`profile:` is optional on work nodes. Children inherit it through implicit parents. An explicit child profile replaces the inherited profile. It is independent of `?POW` and `role:POW`.
+
+Direct bookings produce W111 for below-minimum levels, W112 for unknown assessments, and W113 for an inactive assessment. These checks retain booking hours. A pool does not imply that its person performs every descendant task.
+
+```sh
+node src/cli.ts match data/plan --profile Senior_HW
+node src/cli.ts match data/plan --task ALPHA.pfc.design
+node src/cli.ts match data/plan --profile Senior_HW --include-inactive
+```
+
+Matching prints JSON with one result per person and one check per positive requirement: `meets`, `below`, or `unknown`. Coverage is requirements met divided by positive requirements. Unknown assessments remain in the denominator. Empty profiles have no coverage value. Results sort by coverage, then person ID. Inactive people are excluded by default. People without an assessment remain visible with unknown levels. Matching checks qualifications and does not assign bookings or calculate available capacity.
+
+Import a competency workbook into a new private snapshot:
+
+```sh
+node tools/import-competencies.ts data/source/matrix.xlsx data/plan -o data/plan/competencies.pbt --aliases data/aliases.json
+```
+
+The importer reads only `Fähigkeitsmatrix_new`. It uses the `Name`/`active` header row for competency names, `ROLE` rows for minimum levels, and assessed rows for people. Header whitespace is normalized. Expert annotations in the top summary row are excluded. Competency and profile IDs use sanitized labels. Empty or colliding IDs, invalid levels, and invalid active flags stop the import.
+
+People must already have plan IDs. A unique normalized full-name match links an assessment to that ID. Unmatched or ambiguous names remain unassessed. Optional aliases use an exact matrix name, for example `{"bob":"Robert Example"}`. Duplicate matrix names and one matrix row linked to multiple plan IDs require correction before import. Matrix-only people are not added to the plan automatically.
+
+The importer creates missing planning role declarations from existing references. It retains pre-existing date errors for lint and reports their count. It writes one new file and refuses overwrites. The workbook and existing plan files remain unchanged. On refresh, import against the original plan inputs without the previous snapshot, and review the new snapshot before replacing the selected input. Keep real snapshots and aliases under ignored `data/` or `legacy/`.
 
 ## Defaults and booking status
 
@@ -81,7 +119,7 @@ New spreadsheet imports include one declaration per referenced role. This does n
 |---|---|
 | E001 | syntax error or invalid demand, calendar hours, booking status, or role identifier |
 | E002 | unknown root (with "did you mean") |
-| E003 | unknown person, calendar, or role |
+| E003 | unknown person, calendar, role, competency, or qualification profile |
 | E004 | impossible date/week, malformed or reversed range, invalid duration, booking without dates |
 | E005 | duplicate declaration or root budget |
 | E006 / E007 | `after:` target missing / dependency cycle |
@@ -95,6 +133,9 @@ New spreadsheet imports include one declaration per referenced role. This does n
 | W108 | effort without any window (per root) |
 | W109 | children's effort above the parent's budget |
 | W110 | positive effort without remaining working days |
+| W111 | booked person below a qualification profile's minimum competency level |
+| W112 | booked person lacks a required competency assessment |
+| W113 | booked person's assessment marks them inactive |
 | I201 | active requested booking |
 | I202 | request replaced by an exact confirmation |
 

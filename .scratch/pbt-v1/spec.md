@@ -22,6 +22,8 @@ A small plain-text language, one fact per line, with sigils (`@` person, `+` wor
 
 A one-off importer converts the existing allocation list and effort spreadsheet into the new notation. The files stay the only source of truth (ADR 0001).
 
+Qualification profiles add optional competency requirements to work nodes. Named assessments support minimum checks and candidate matching. Planning roles still control hour balances. See ticket 09 and ADR 0012.
+
 ## User Stories
 
 1. As a line manager, I want to declare each person once with their capacity and primary role, so that every booking refers to a known person.
@@ -90,6 +92,9 @@ A one-off importer converts the existing allocation list and effort spreadsheet 
 
   Missing or malformed identifiers produce E001. Unknown roles produce E003 at the explicit reference. Duplicate declarations produce E005. New spreadsheet imports emit the required role declarations.
 - **Inherited defaults**: tags combine from ancestors to descendants without duplicates. `role:HW,SYS` sets default roles on a project or node. A node's explicit `?roles` replaces the inherited role list. `loc:CH` selects its effort calendar. An explicit role list or `loc:` overrides the inherited default. Implicit nodes pass defaults onward.
+- **Qualification profiles**: `competency ID "Title"`, `profile ID "Title" SKILL:3`, and `assessment @id active:true SKILL:2` declare competency requirements and named assessments. Levels are integers from 0 through 4. Optional node `profile:ID` inherits through implicit parents. Explicit children replace it. E003 identifies unknown competencies or profiles. E005 identifies duplicate declarations. W111 identifies levels below minimum, W112 identifies unknown assessments, and W113 identifies inactive people on direct bookings. Pool bookings do not assign every descendant task.
+
+  `match --profile ID` or `match --task PATH` shows checks and coverage, sorted by requirements met. Zero or absent assessments are unknown. Positive profile levels define the denominator. Empty profiles have no coverage value. Matching retains planning roles and all hour calculations. Ticket 09 defines import and identity requirements.
 - **Effort units**: `h` is hours. `d` and `pm` use the node's inherited calendar hours per day and month, including for `left:`. Defaults are 8 h/day and 164 h/month, with `defaultHpm` available to compiler callers. Person calendars determine booking hours independently. Calendar hour factors must be positive and finite. Project budgets use the same effort units; duplicate root budgets produce E005.
 - **Booking status**: confirmed if the file lives under `teams/`, requested if under `projects/`, unspecified elsewhere. An explicit valid `status:` wins. Unknown values produce E001. Forecast supply includes all active states (ADRs 0007 and 0010).
 - **Confirmation matching**: match person, path, percentage, and resolved inclusive dates. Each confirmed line replaces one exact request. Match equal candidates by source path and line for file-order independence. Partial matches and extra duplicates remain active. Replaced requests produce I202 and remain in source files. Active requests produce I201. Calculated bookings and spreadsheet booking rows contain active lines only.
@@ -121,5 +126,5 @@ A one-off importer converts the existing allocation list and effort spreadsheet 
 
 ## Further Notes
 
-- Design decisions and their reasons: `docs/adr/0001`–`0011`; vocabulary: `CONTEXT.md`; design map with open questions: `.scratch/pbt-design/map.md`.
+- Design decisions and their reasons: `docs/adr/0001`–`0012`; vocabulary: `CONTEXT.md`; design map with open questions: `.scratch/pbt-design/map.md`.
 - The real legacy data stays outside the repo. Running the importer on it is expected to report several overbookings above 100% (up to 400%), undeclared roots and one invalid date.
