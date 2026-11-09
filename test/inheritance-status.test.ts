@@ -4,7 +4,11 @@ import { compile, type SourceFile } from "../src/compile.ts";
 import { loadRows, monthHeaders, roleRows, treeRows } from "../src/views.ts";
 import { renderReport } from "../src/report.ts";
 
-const registry = `calendar CH 8h/d 164h/m
+const registry = `role HW
+role SYS
+role TEST
+role DSP
+calendar CH 8h/d 164h/m
 calendar DE 6h/d 150h/m
 person @alice "Alice Example" role:HW loc:CH
 project +ALPHA "Alpha Example" 2024-01..2024-03 #site`;

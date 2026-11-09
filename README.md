@@ -5,6 +5,8 @@ Resource planning as plain text. Project managers write **demand** (effort per r
 ```
 # registry.pbt
 calendar CH 8h/d 164h/m
+role POW "Power electronics"
+role DSP "Digital signal processing"
 person  @alice "Alice Example" cap:100% role:POW loc:CH
 project +ALPHA "Alpha charger" 2024-01..2024-06
 
@@ -28,6 +30,10 @@ project +ALPHA "Alpha charger" 2024-01..2024-06
 | `after:` `left:` `done:` `status:` `!1` | attributes | | `# ` / `//` | comment |
 
 Dates: `2024-03`, `2024-Q2`, `2024-W10`, `2024-03-15`, `2024-03..+3m`. ISO only; impossible dates are errors.
+
+Week 53 must exist in the named ISO year. For example, `2020-W53` is valid and `2021-W53` is an error. Ranges accept one `..` separator and at least one endpoint. Relative durations must be positive integers with an explicit start and a representable end date.
+
+Declare every referenced role once, for example `role CONN.SW "Connection software"`. Role IDs are case-sensitive. `role:CONN.SW` and `?CONN.SW` require that exact declaration. Forward declarations and declarations in separate files are valid. Existing plans without role declarations now report E003 until their registry contains the referenced roles.
 
 ## Defaults and booking status
 
@@ -67,14 +73,16 @@ node src/cli.ts lint data/plan
 
 The importer keeps legacy mistakes (typos, impossible dates, unknown projects) so the first lint shows them. Keep real planning data in `data/` or `legacy/`: both are git-ignored.
 
+New spreadsheet imports include one declaration per referenced role. This does not rewrite existing imported files.
+
 ## Lint codes
 
 | Code | Meaning |
 |---|---|
-| E001 | syntax error or invalid demand, calendar hours, or booking status |
+| E001 | syntax error or invalid demand, calendar hours, booking status, or role identifier |
 | E002 | unknown root (with "did you mean") |
-| E003 | unknown person or calendar |
-| E004 | impossible date, reversed range, booking without dates |
+| E003 | unknown person, calendar, or role |
+| E004 | impossible date/week, malformed or reversed range, invalid duration, booking without dates |
 | E005 | duplicate declaration or root budget |
 | E006 / E007 | `after:` target missing / dependency cycle |
 | E008 | overlapping capacity changes for one person |

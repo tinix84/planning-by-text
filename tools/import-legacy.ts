@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
+import { parseFile } from "../src/parse.ts";
 
 export const sanitizeId = (s: string) => s.trim().replace(/&/g, "and").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
 export const personId = (name: string) =>
@@ -174,7 +175,10 @@ async function main(argv: string[]) {
     const window = flag("--window");
     registry += `\n# effort plan root (from ${xlsxPath.split(/[\\/]/).pop()})\nproject +${root} "Effort plan ${root}"${window ? " " + window : ""}\n`;
     mkdirSync(join(outDir, "projects"), { recursive: true });
-    writeFileSync(join(outDir, "projects", `${root}.pbt`), await convertEffort(xlsxPath, root, window));
+    const text = await convertEffort(xlsxPath, root, window);
+    const roles = new Set(parseFile(text, `projects/${root}.pbt`, []).flatMap((s) => s.kind === "task" ? s.roles.map((r) => r.role) : []));
+    registry += `\n# roles from the effort plan\n${[...roles].sort().map((role) => `role ${role}`).join("\n")}\n`;
+    writeFileSync(join(outDir, "projects", `${root}.pbt`), text);
   }
   writeFileSync(join(outDir, "registry.pbt"), registry);
   writeFileSync(join(outDir, "teams", "legacy.pbt"), r.teams);

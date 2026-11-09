@@ -86,11 +86,22 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
   const defHpm = opts.defaultHpm ?? 164;
 
   // 1. declarations
+  const roleDeclarations = new Map<string, Loc>();
   for (const s of stmts) {
-    if (s.kind === "calendar") {
+    if (s.kind === "role") {
+      const previous = roleDeclarations.get(s.id);
+      if (previous) D("error", "E005", `role ${s.id} already declared at ${previous.file}:${previous.line}`, s.at);
+      else roleDeclarations.set(s.id, s.at);
+    } else if (s.kind === "calendar") {
       if (model.calendars.has(s.id)) D("error", "E005", `calendar ${s.id} declared twice`, s.at);
       model.calendars.set(s.id, { id: s.id, hpd: s.hpd, hpm: s.hpm });
     }
+  }
+  for (const s of stmts) {
+    const refs = s.kind === "person" ? s.roles : s.kind === "project" || s.kind === "task"
+      ? [...(s.attrs.other.role?.split(",") ?? []), ...(s.kind === "task" ? s.roles.map((r) => r.role) : [])] : [];
+    for (const role of new Set(refs))
+      if (!roleDeclarations.has(role)) D("error", "E003", `unknown role ${role}`, s.at);
   }
   for (const s of stmts) {
     if (s.kind === "person") {

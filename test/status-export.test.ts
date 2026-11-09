@@ -9,7 +9,7 @@ import { writeXlsx } from "../src/xlsx.ts";
 
 test("spreadsheet status hours and active bookings agree with forecast totals", async () => {
   const r = compile([
-    { path: "registry.pbt", text: "calendar TEST 8h/d 100h/m\nperson @alice role:HW loc:TEST\nproject +ALPHA 2024-01\n+ALPHA.task" },
+    { path: "registry.pbt", text: "role HW\ncalendar TEST 8h/d 100h/m\nperson @alice role:HW loc:TEST\nproject +ALPHA 2024-01\n+ALPHA.task" },
     { path: "projects/a.pbt", text: "@alice +ALPHA 100% 2024-01\n@alice +ALPHA.task 25% 2024-01" },
     { path: "teams/t.pbt", text: "@alice +ALPHA 100% 2024-01" },
   ]);

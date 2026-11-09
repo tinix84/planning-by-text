@@ -69,6 +69,12 @@ function parsePct(s: string): number {
   return pct;
 }
 
+function roleIds(value: string): string[] {
+  const ids = value.split(",");
+  if (ids.some((id) => !PATH.test(id))) throw new Error(`bad role identifier list: ${value}`);
+  return ids;
+}
+
 export function parseFile(text: string, file: string, diags: Diag[]): Stmt[] {
   const out: Stmt[] = [];
   text.split(/\r?\n/).forEach((raw, idx) => {
@@ -96,7 +102,7 @@ function common(toks: string[]): Common {
     else if (t.startsWith("#") && t.length > 1) c.tags.push(t.slice(1));
     else if (/^!\d$/.test(t)) c.attrs.prio = +t.slice(1);
     else if (isDateLike(t)) {
-      if (haveRange) throw new Error(`two date ranges on one line: ${t}`);
+      if (haveRange) throw new DateError(`two date ranges on one line: ${t}`);
       c.range = parseRange(t);
       haveRange = true;
     } else if (/^[a-z][a-z_]*:/.test(t)) {
@@ -112,6 +118,7 @@ function common(toks: string[]): Common {
         if (!["confirmed", "requested", "unspecified"].includes(v)) throw new Error(`unknown booking status: ${v}`);
         c.attrs.status = v;
       }
+      else if (k === "role") { roleIds(v); c.attrs.other.role = v; }
       else c.attrs.other[k] = v;
     } else c.rest.push(t);
   }
@@ -127,7 +134,7 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
     const c = common(toks.slice(2));
     if (c.rest.length) throw new Error(`unexpected: ${c.rest.join(" ")}`);
     const cap = c.attrs.other.cap !== undefined ? parsePct(c.attrs.other.cap) : 1;
-    const roles = c.attrs.other.role ? c.attrs.other.role.split(",").filter(Boolean) : [];
+    const roles = c.attrs.other.role !== undefined ? roleIds(c.attrs.other.role) : [];
     return { kind: "person", id: id.slice(1), name: c.title, cap, roles, loc: c.attrs.other.loc, tags: c.tags, at };
   }
 
@@ -158,8 +165,11 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
   }
 
   if (head === "role") {
-    const c = common(toks.slice(2));
-    return { kind: "role", id: toks[1], title: c.title, at };
+    const id = toks[1], title = toks[2];
+    if (!id || !PATH.test(id)) throw new Error("role needs an identifier, such as HW or CONN.SW");
+    if (toks.length > 3 || (title !== undefined && !(title.startsWith('"') && title.endsWith('"') && title.length >= 2)))
+      throw new Error("role accepts only an identifier and an optional quoted title");
+    return { kind: "role", id, title: title?.slice(1, -1), at };
   }
 
   if (head.startsWith("@")) {
@@ -190,8 +200,9 @@ function parseLine(toks: string[], at: Loc): Stmt | null {
     for (const t of c.rest) {
       if (t.startsWith("~")) { parseEffort(t.slice(1), 1, 1); effort = t.slice(1); }
       else if (t.startsWith("?")) {
-        const [r, sh] = t.slice(1).split(":");
-        roles.push({ role: r, share: sh ? parsePct(sh) : undefined });
+        const parts = t.slice(1).split(":");
+        if (parts.length > 2 || !PATH.test(parts[0]) || parts[1] === "") throw new Error(`bad role demand: ${t}`);
+        roles.push({ role: parts[0], share: parts[1] !== undefined ? parsePct(parts[1]) : undefined });
       } else throw new Error(`unexpected: ${t}`);
     }
     const explicit = roles.reduce((sum, r) => sum + (r.share ?? 0), 0);
