@@ -54,20 +54,22 @@ The importer keeps legacy mistakes (typos, impossible dates, unknown projects) s
 
 | Code | Meaning |
 |---|---|
-| E001 | line cannot be parsed |
+| E001 | syntax error, invalid role shares or completion, or non-finite effort/percentage |
 | E002 | unknown root (with "did you mean") |
 | E003 | unknown person or calendar |
 | E004 | impossible date, reversed range, booking without dates |
 | E005 | duplicate declaration |
 | E006 / E007 | `after:` target missing / dependency cycle |
+| E008 | overlapping capacity changes for one person |
 | W101 | person load above capacity (per person: months and peak) |
-| W102 | booking on a person with `cap:0%` |
+| W102 | positive booking on a working day with effective zero capacity |
 | W103 | path used by a booking but never declared as a task |
 | W104 | role demand above supply (per root and role) |
 | W105 | pins exceed their pool |
-| W106 | child window outside parent, or empty after `after:` |
+| W106 | child window outside parent, or blocked by parent/predecessor constraints |
 | W108 | effort without any window (per root) |
 | W109 | children's effort above the parent's budget |
+| W110 | positive effort without remaining working days |
 | I201 | requested booking |
 
 ## Docs

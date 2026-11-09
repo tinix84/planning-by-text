@@ -1,12 +1,12 @@
 // The deep module: compile(files) → { model, diagnostics }. Pure: no file system, no clock.
-import { fmt, monthKey, monthLabel, workdaysByMonth, workdaysInMonth, monthStart, monthEnd, type Range } from "./dates.ts";
+import { isWorkday, monthKey, monthLabel, workdaysByMonth, workdaysInMonth, monthStart, monthEnd, type Range } from "./dates.ts";
 import { parseFile, type Diag, type Loc, type RoleDemand, type Stmt } from "./parse.ts";
 
 export type SourceFile = { path: string; text: string };
 
 export type Person = {
   id: string; name?: string; cap: number; roles: string[]; loc?: string; at: Loc;
-  caps: { s: number; e: number; cap: number }[];
+  caps: { s: number; e: number; cap: number; at: Loc }[];
 };
 export type Calendar = { id: string; hpd: number; hpm: number };
 export type Node = {
@@ -151,7 +151,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
       const p = model.persons.get(s.person);
       if (!p) { D("error", "E003", `unknown person @${s.person}`, s.at); continue; }
       if (s.range.start === undefined || s.range.end === undefined) { D("error", "E004", `capacity change needs a full date range`, s.at); continue; }
-      p.caps.push({ s: s.range.start, e: s.range.end, cap: s.cap });
+      p.caps.push({ s: s.range.start, e: s.range.end, cap: s.cap, at: s.at });
     } else if (s.kind === "booking") {
       let ok = true;
       if (!model.persons.has(s.person)) { D("error", "E003", `unknown person @${s.person}`, s.at); ok = false; }
@@ -162,6 +162,21 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     }
   }
 
+  for (const p of model.persons.values()) {
+    p.caps.sort((a, b) => a.s - b.s || a.e - b.e || a.at.file.localeCompare(b.at.file) || a.at.line - b.at.line);
+    for (let i = 0; i < p.caps.length; i++) {
+      const c = p.caps[i];
+      for (const prev of p.caps.slice(0, i)) {
+        if (prev.e >= c.s)
+          D("error", "E008", `@${p.id}: capacity changes overlap with ${prev.at.file}:${prev.at.line}`, c.at);
+      }
+    }
+  }
+  const capacityAt = (p: Person, day: number): number => {
+    const active = p.caps.filter((c) => c.s <= day && day <= c.e);
+    return active.length ? Math.min(...active.map((c) => c.cap)) : p.cap;
+  };
+
   // 4. windows (inheritance + after:)
   const resolveRef = (from: string, ref: string): string => {
     const r = ref.replace(/^\+/, "");
@@ -170,29 +185,56 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     return r;
   };
   const state = new Map<string, "busy" | "done">();
+  const bounds = new Map<string, { s?: number; e?: number }>();
   const computeWindow = (path: string): void => {
     if (state.get(path) === "done") return;
     const n = model.nodes.get(path)!;
-    if (state.get(path) === "busy") { D("error", "E007", `dependency cycle through +${path}`, n.decl); n.window = undefined; return; }
+    if (state.get(path) === "busy") { D("error", "E007", `dependency cycle through +${path}`, n.decl); n.window = undefined; n.emptyWindow = true; return; }
     state.set(path, "busy");
     let pw: { s?: number; e?: number } = {};
-    if (n.parent) { computeWindow(n.parent); const p = model.nodes.get(n.parent)!; pw = p.window ?? { s: p.own.start, e: p.own.end }; }
+    if (n.parent) {
+      computeWindow(n.parent);
+      const p = model.nodes.get(n.parent)!;
+      if (p.emptyWindow) {
+        n.emptyWindow = true;
+        D("warning", "W106", `+${path} inherits an empty parent window`, n.decl);
+        state.set(path, "done");
+        return;
+      }
+      pw = bounds.get(n.parent) ?? {};
+    }
     let s = n.own.start ?? pw.s, e = n.own.end ?? pw.e;
-    if (n.parent && pw.s !== undefined && pw.e !== undefined &&
-        ((n.own.start !== undefined && n.own.start < pw.s) || (n.own.end !== undefined && n.own.end > pw.e)))
-      D("warning", "W106", `+${path} window ${fmt(s!)}..${fmt(e!)} is outside its parent's ${fmt(pw.s)}..${fmt(pw.e)}`, n.decl);
+    if ((pw.s !== undefined && n.own.start !== undefined && n.own.start < pw.s) ||
+        (pw.e !== undefined && n.own.end !== undefined && n.own.end > pw.e))
+      D("warning", "W106", `+${path} window exceeds its parent window`, n.decl);
+    if (pw.s !== undefined) s = Math.max(s ?? pw.s, pw.s);
+    if (pw.e !== undefined) e = Math.min(e ?? pw.e, pw.e);
     for (const a of n.after) {
       const target = resolveRef(path, a);
       const t = model.nodes.get(target);
       if (!t) { D("error", "E006", `after:${a} → +${target} not found`, n.decl); continue; }
       computeWindow(target);
-      if (t.window) s = Math.max(s ?? -Infinity, t.window.e + 1);
+      if (t.emptyWindow) {
+        n.emptyWindow = true;
+        D("warning", "W106", `+${path} cannot follow +${target} with an empty window`, n.decl);
+        state.set(path, "done");
+        return;
+      }
+      const end = bounds.get(target)?.e;
+      if (end === undefined) {
+        n.emptyWindow = true;
+        D("warning", "W106", `+${path} cannot follow +${target} without an end date`, n.decl);
+        state.set(path, "done");
+        return;
+      }
+      s = Math.max(s ?? -Infinity, end + 1);
     }
     n.window = s !== undefined && e !== undefined && isFinite(s) ? { s, e } : undefined;
     if (n.window && n.window.e < n.window.s) {
-      D("warning", "W106", `+${path} has an empty window (its predecessors end after its own end ${fmt(n.window.e)})`, n.decl);
+      D("warning", "W106", `+${path} has no dates within its parent and predecessor constraints`, n.decl);
       n.window = undefined; n.emptyWindow = true;
     }
+    if (!n.emptyWindow) bounds.set(path, { s, e });
     state.set(path, "done");
   };
   for (const p of model.nodes.keys()) computeWindow(p);
@@ -232,7 +274,9 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
         } else {
           let s = n.window.s;
           if (n.left !== undefined || n.done !== undefined) if (asOf !== undefined) s = Math.max(s, asOf);
-          if (s <= n.window.e) {
+          if (left > 0 && workdaysByMonth(s, n.window.e).size === 0) {
+            D("warning", "W110", `+${path}: ${left} h has no working days within its remaining window`, n.decl);
+          } else if (s <= n.window.e) {
             const roles = n.roles.length ? n.roles : [{ role: "(no role)" }];
             const explicit = roles.reduce((a, r) => a + (r.share ?? 0), 0);
             const unshared = roles.filter((r) => r.share === undefined).length;
@@ -263,7 +307,14 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     const hours = new Map<number, number>();
     for (const [k, wd] of workdaysByMonth(st, en)) { hours.set(k, s.pct * hpmOf(p) * wd / workdaysInMonth(k)); months.add(k); }
     model.bookings.push({ person: s.person, path: s.path, pct: s.pct, s: st, e: en, status, at: s.at, hours });
-    if (p.cap === 0) D("warning", "W102", `@${s.person} has cap:0% but is booked ${Math.round(s.pct * 100)}% on +${s.path}`, s.at);
+    if (s.pct > 0) {
+      for (let day = st; day <= en; day++) {
+        if (isWorkday(day) && capacityAt(p, day) === 0) {
+          D("warning", "W102", `@${s.person} has zero capacity during its booking on +${s.path}`, s.at);
+          break;
+        }
+      }
+    }
     if (status === "requested") D("info", "I201", `requested booking: @${s.person} +${s.path} ${Math.round(s.pct * 100)}%`, s.at);
   }
 
@@ -277,36 +328,53 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
     model.load.set(p.id, row);
     const bs = byPerson.get(p.id) ?? [];
     const over: string[] = []; let peak = 0;
-    const pinWarned = new Set<Booking>();
+    const pinWarned = new Set<string>();
     for (const k of model.months) {
       const wdm = workdaysInMonth(k);
       let capH = 0;
-      { // capacity, prorated by overrides
-        let rest = wdm;
-        for (const c of p.caps) {
-          const cov = workdaysByMonth(Math.max(c.s, monthStart(k)), Math.min(c.e, monthEnd(k))).get(k) ?? 0;
-          capH += c.cap * cov; rest -= cov;
-        }
-        capH = (capH + p.cap * Math.max(0, rest)) / wdm * hpmOf(p);
-      }
+      for (let day = monthStart(k); day <= monthEnd(k); day++)
+        if (isWorkday(day)) capH += capacityAt(p, day);
+      capH = capH / wdm * hpmOf(p);
       const active = bs.filter((b) => (b.hours.get(k) ?? 0) > 0);
       const cell: Cell = { hours: 0, capHours: capH, confirmed: 0, requested: 0, parts: [] };
-      const tops = active.filter((b) => !active.some((c) => c !== b && isAnc(c.path, b.path)));
-      for (const t of tops) {
-        const pins = active.filter((b) => b !== t && isAnc(t.path, b.path));
-        const own = t.hours.get(k)!;
-        const pinSum = pins.reduce((a, b) => a + b.hours.get(k)!, 0);
-        if (pinSum > own + EPS && !pinWarned.has(t)) {
-          pinWarned.add(t);
-          D("warning", "W105", `@${p.id}: bookings under +${t.path} need ${Math.round(pinSum)} h in ${monthLabel(k)}, more than the pool's ${Math.round(own)} h`, pins[0].at);
+      const groups = new Map<string, Booking[]>();
+      for (const b of active) {
+        if (!groups.has(b.path)) groups.set(b.path, []);
+        groups.get(b.path)!.push(b);
+      }
+      const children = new Map<string, string[]>(), tops: string[] = [];
+      for (const path of groups.keys()) {
+        let parent = path;
+        do { parent = parent.includes(".") ? parent.slice(0, parent.lastIndexOf(".")) : ""; }
+        while (parent && !groups.has(parent));
+        if (parent) {
+          if (!children.has(parent)) children.set(parent, []);
+          children.get(parent)!.push(path);
+        } else tops.push(path);
+      }
+      const ownHours = (path: string) => groups.get(path)!.reduce((sum, b) => sum + b.hours.get(k)!, 0);
+      const effectiveHours = (path: string): number => {
+        const own = ownHours(path);
+        const pins = children.get(path) ?? [];
+        const pinSum = pins.reduce((sum, child) => sum + effectiveHours(child), 0);
+        if (pinSum > own + EPS && !pinWarned.has(path)) {
+          pinWarned.add(path);
+          D("warning", "W105", `@${p.id}: bookings under +${path} need ${Math.round(pinSum)} h in ${monthLabel(k)}, more than the pool's ${Math.round(own)} h`, groups.get(pins[0])![0].at);
         }
-        const eff = Math.max(own, pinSum);
+        return Math.max(own, pinSum);
+      };
+      for (const path of tops) {
+        const eff = effectiveHours(path);
         cell.hours += eff;
-        if (t.status === "requested") cell.requested += eff; else cell.confirmed += eff;
-        cell.parts.push({ path: t.path, hours: eff, status: t.status });
-        for (const x of pins) cell.parts.push({ path: x.path, hours: 0, status: x.status });
+        for (const b of groups.get(path)!) {
+          const h = eff * b.hours.get(k)! / ownHours(path);
+          if (b.status === "requested") cell.requested += h; else cell.confirmed += h;
+          cell.parts.push({ path, hours: h, status: b.status });
+        }
+        for (const b of active.filter((b) => isAnc(path, b.path)))
+          cell.parts.push({ path: b.path, hours: 0, status: b.status });
         const role = p.roles[0] ?? "(no role)";
-        add3(model.supply, t.path.split(".")[0], role, k, eff);
+        add3(model.supply, path.split(".")[0], role, k, eff);
       }
       row.set(k, cell);
       if (cell.hours > capH + EPS) {
@@ -314,7 +382,7 @@ export function compile(files: SourceFile[], opts: CompileOptions = {}): { model
         peak = Math.max(peak, capH > 0 ? cell.hours / capH : Infinity);
       }
     }
-    if (over.length && p.cap > 0)
+    if (over.length)
       D("warning", "W101", `@${p.id} overloaded in ${over.length} month(s) (${compactMonths(over)}), peak ${isFinite(peak) ? Math.round(peak * 100) + "%" : "∞"} of capacity`, p.at);
   }
 
