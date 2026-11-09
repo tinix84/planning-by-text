@@ -63,8 +63,9 @@ test("project budget syntax uses the root calendar and does not add to its child
 test("HTML tree rows retain full paths so project filters include descendants", () => {
   const r = run({ "projects/a.pbt": '+ALPHA.group.task "A & B" ~100h ?HW' });
   const html = renderReport(r.model, r.diagnostics);
-  const row = html.match(/<tr class="f[^>]*>[^]*?A &amp; B[^]*?<\/tr>/)?.[0];
+  const row = html.match(/<tr[^>]*data-tree-path="ALPHA.group.task"[^>]*>[^]*?<\/tr>/)?.[0];
   assert.ok(row?.includes(">ALPHA.group.task</td>"));
+  assert.ok(row?.includes("A &amp; B"));
   assert.match(html, /aria-label="Expand ALPHA.group"/);
 });
 
