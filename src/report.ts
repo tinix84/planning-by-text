@@ -67,7 +67,18 @@ export function renderReport(model: Model, diags: Diag[], opts: { title?: string
         c!.parts.filter((x) => x.hours > 0).map((x) => `+${x.path}: ${r0(x.hours)} h (${x.status})`).join("\n");
       return `<td class="h ${band}${c!.requested ? " rq" : ""}" title="${esc(tip)}">${isFinite(p) ? Math.round(p * 100) + "%" : "∞"}</td>`;
     }).join("");
-    return `<tr class="f"><th class="pl">${personDetails(r.person, r.name)}<small> @${esc(r.person)} · ${esc(r.role || "no role")} · baseline capacity ${Math.round(r.cap * 100)}%</small></th>${cells}</tr>`;
+    const roots = [...new Set((byPerson.get(r.person) ?? []).map(b => model.nodes.get(b.path)!.root))].sort();
+    const projects = roots.map(root => {
+      const hours = r.cells.map((c, i) => {
+        const parts = c?.parts.filter(p => model.nodes.get(p.path)!.root === root) ?? [];
+        const total = parts.reduce((sum, p) => sum + p.hours, 0);
+        const status = (s: Booking["status"]) => r0(parts.filter(p => p.status === s).reduce((sum, p) => sum + p.hours, 0));
+        const tip = `${root} — ${months[i]}: ${r0(total)} h allocated\n${status("confirmed")} h confirmed · ${status("requested")} h requested · ${status("unspecified")} h unspecified`;
+        return `<td class="h allocated${parts.some(p => p.status === "requested" && p.hours > 0) ? " rq" : ""}" data-month="${months[i]}" data-hours="${total}" title="${esc(tip)}">${total ? `${r0(total)} h` : "—"}</td>`;
+      }).join("");
+      return `<tr class="person-project" data-person-project="${esc(root)}" data-owner="${esc(r.person)}" hidden><th scope="row" class="pl mono">+${esc(root)}<small>allocated hours</small></th>${hours}</tr>`;
+    }).join("");
+    return `<tr class="f" data-load-person="${esc(r.person)}"><th class="pl">${personDetails(r.person, r.name)}<small> @${esc(r.person)} · ${esc(r.role || "no role")} · baseline capacity ${Math.round(r.cap * 100)}%</small></th>${cells}</tr>${projects}`;
   }).join("");
 
   const balanceCells = (demand: number[], supply: number[], roleGaps?: boolean[]): string =>
@@ -124,6 +135,7 @@ th.pl{position:sticky;left:0;background:var(--card);white-space:nowrap;font-weig
 td.h{text-align:center;font-variant-numeric:tabular-nums;font-size:12px}td.z{background:transparent}
 td.u{background:var(--u);color:var(--uf)}td.f{background:var(--f);color:var(--ff)}td.o{background:var(--o);color:var(--of);font-weight:600}td.x{background:var(--x);color:var(--xf);font-weight:700}
 td.rq{outline:2px dashed var(--acc);outline-offset:-3px}
+.person-project th.pl{padding-left:24px;font-weight:400}.person-project td{background:var(--bg);color:var(--mut)}
 td.b{font-size:11px;text-align:center;font-variant-numeric:tabular-nums}td.b span{display:block}td.b span+span{color:var(--mut)}td.short{background:var(--o);color:var(--of)}
 .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}.num{text-align:right;font-variant-numeric:tabular-nums}
 .tag{font:600 11px ui-monospace,monospace;padding:1px 6px;border-radius:4px}.tag.error{background:var(--o);color:var(--of)}.tag.warning{background:var(--f);color:var(--ff)}.tag.info{background:var(--u);color:var(--uf)}
@@ -152,6 +164,7 @@ ${assumptions}
 <span class="pill">${counts.error} errors</span><span class="pill">${counts.warning} warnings</span><span class="pill">${counts.info} info</span></div>
 
 <h2>Load per person and month (% of capacity)</h2>
+<p class="sub">Expand a person to show project hours under each month. Project rows include pins within their pools.</p>
 <div class="legend"><span><i style="background:var(--u)"></i>&lt; 80%</span><span><i style="background:var(--f)"></i>80–100%</span><span><i style="background:var(--o)"></i>&gt; 100%</span><span><i style="background:var(--x)"></i>booked at 0% capacity</span><span><i style="outline:2px dashed var(--acc);outline-offset:-2px"></i>contains requested hours</span></div>
 <div class="wrap"><table><thead><tr><th class="pl">Person</th>${mh}</tr></thead><tbody>${heat}</tbody></table></div>
 
@@ -170,15 +183,18 @@ ${assumptions}
 <script>
 (function(){var q=document.getElementById("q"),ni=document.getElementById("noinfo");
 function hit(r,t){return !t||r.textContent.toLowerCase().indexOf(t)>=0||r.innerHTML.toLowerCase().indexOf(t)>=0;}
+var people=new Map(Array.from(document.querySelectorAll("[data-load-person]")).map(function(r){return [r.dataset.loadPerson,r];}));
+function runPeople(){document.querySelectorAll("[data-person-project]").forEach(function(r){var p=people.get(r.dataset.owner);r.hidden=p.classList.contains("hide")||!p.querySelector("details[data-person]").open;});}
 var treeList=Array.from(document.querySelectorAll("#work-tree [data-tree-path]")),treeIndex=new Map(treeList.map(function(r){return [r.dataset.treePath,r];})),treeExpanded=new Set(),treeSearchClosed=new Set(),treeQuery="";
 function parents(path){var out=[],r=treeIndex.get(path),p=r&&r.dataset.treeParent;while(p){out.push(p);r=treeIndex.get(p);p=r&&r.dataset.treeParent;}return out;}
 function runTree(t){if(t!==treeQuery){treeSearchClosed.clear();treeQuery=t;}var context=new Set(),forced=new Set();
 if(t){var matches=new Set(treeList.filter(function(r){return r.dataset.treeSearch.indexOf(t)>=0;}).map(function(r){return r.dataset.treePath;}));var tops=new Set(Array.from(matches).filter(function(path){return !parents(path).some(function(p){return matches.has(p);});}));tops.forEach(function(path){context.add(path);parents(path).forEach(function(p){context.add(p);forced.add(p);});});treeList.forEach(function(r){if(parents(r.dataset.treePath).some(function(p){return tops.has(p);}))context.add(r.dataset.treePath);});}
 function opened(path){return (treeExpanded.has(path)||forced.has(path))&&!treeSearchClosed.has(path);}
 treeList.forEach(function(r){var path=r.dataset.treePath;r.hidden=!!t&&!context.has(path)||!parents(path).every(opened);var b=r.querySelector(".tree-toggle");if(b){var open=opened(path);b.setAttribute("aria-expanded",String(open));b.setAttribute("aria-label",(open?"Collapse ":"Expand ")+path);b.querySelector(".tree-arrow").textContent=open?"▾":"▸";}});document.getElementById("tree-count").textContent=treeList.filter(function(r){return !r.hidden;}).length+" of "+treeList.length+" work items shown";}
-function run(){var t=q.value.toLowerCase();document.querySelectorAll("tr.f:not(.balance-total):not(.tree-row)").forEach(function(r){var info=ni.checked&&r.classList.contains("lv-info");r.classList.toggle("hide",!hit(r,t)||info);});
+function run(){var t=q.value.toLowerCase();document.querySelectorAll("tr.f:not(.balance-total):not(.tree-row)").forEach(function(r){var info=ni.checked&&r.classList.contains("lv-info");r.classList.toggle("hide",!hit(r,t)||info);});runPeople();
 document.querySelectorAll("tr.balance-total").forEach(function(r){var b=r.querySelector(".role-toggle"),panel=document.getElementById(b.getAttribute("aria-controls")),rows=Array.from(panel.querySelectorAll("[data-balance-role]")),projectHit=!t||r.dataset.balanceProject.toLowerCase().indexOf(t)>=0,roleHit=rows.some(function(row){return hit(row,t);}),show=hit(r,t)||roleHit;r.classList.toggle("hide",!show);panel.hidden=!show||b.getAttribute("aria-expanded")!=="true";rows.forEach(function(row){row.hidden=!projectHit&&roleHit&&!hit(row,t);});});runTree(t);}
 document.querySelectorAll(".role-toggle").forEach(function(b){b.addEventListener("click",function(){b.setAttribute("aria-expanded",b.getAttribute("aria-expanded")==="true"?"false":"true");run();});});
+document.querySelectorAll("details[data-person]").forEach(function(d){d.addEventListener("toggle",runPeople);});
 document.querySelectorAll(".tree-toggle").forEach(function(b){b.addEventListener("click",function(){var path=b.closest("[data-tree-path]").dataset.treePath;if(b.getAttribute("aria-expanded")==="true"){treeExpanded.delete(path);treeSearchClosed.add(path);}else{treeExpanded.add(path);treeSearchClosed.delete(path);}runTree(q.value.toLowerCase());});});
 function treeAll(expand){treeQuery=q.value.toLowerCase();treeExpanded.clear();treeSearchClosed.clear();treeList.forEach(function(r){if(r.querySelector(".tree-toggle")){(expand?treeExpanded:treeSearchClosed).add(r.dataset.treePath);}});runTree(treeQuery);}
 document.getElementById("tree-expand-all").addEventListener("click",function(){treeAll(true);});document.getElementById("tree-collapse-all").addEventListener("click",function(){treeAll(false);});
