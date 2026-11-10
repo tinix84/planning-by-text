@@ -15,7 +15,7 @@ Planning by Text: a plain-text language and TypeScript tool for resource plannin
 
 ## Agent skills
 
-- Issue tracker: local markdown, see `docs/agents/issue-tracker.md`
+- Issue tracker: GitHub Issues in `tinix84/planning-by-text`, see `docs/agents/issue-tracker.md`
 - Triage labels: `docs/agents/triage-labels.md`
 - Domain docs: `docs/agents/domain.md`
 - Design map: `.scratch/pbt-design/map.md`; v1 spec and tickets: `.scratch/pbt-v1/`
